@@ -1,0 +1,115 @@
+on: [push]
+
+name: Continuous integration
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        target:
+          - aarch64-unknown-linux-musl
+          - x86_64-apple-darwin
+          - x86_64-unknown-linux-musl
+    env:
+      CARGO_NET_GIT_FETCH_WITH_CLI: true
+    steps:
+      - name: Install target dependencies
+        if: ${{ matrix.target == 'x86_64-apple-darwin'}}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake git clang
+          git clone https://github.com/tpoechtrager/osxcross /opt/osxcross
+          cd /opt/osxcross
+          wget https://s3.dockerproject.org/darwin/v2/MacOSX10.10.sdk.tar.xz --directory-prefix tarballs/
+          UNATTENDED=yes OSX_VERSION_MIN=10.8 ./build.sh
+      - uses: actions/checkout@v2
+      - uses: webfactory/ssh-agent@v0.5.3
+        with:
+          ssh-private-key: ${{ secrets.REISHI_SSH_KEY }}
+      - uses: actions-rs/toolchain@v1
+        with:
+          target: ${{ matrix.target }}
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        if: ${{ matrix.target != 'x86_64-apple-darwin'}}
+        env:
+          DOCKER_OPTS: "--volume ${{ env.SSH_AUTH_SOCK }}:/ssh-agent --env SSH_AUTH_SOCK=/ssh-agent"
+        with:
+          use-cross: true
+          command: build
+          args: --target ${{ matrix.target }}
+      - uses: actions-rs/cargo@v1
+        if: ${{ matrix.target == 'x86_64-apple-darwin'}}
+        env:
+          RUSTFLAGS: "-C linker=/opt/osxcross/target/bin/o64-clang"
+          CC_x86_64-apple-darwin: /opt/osxcross/target/bin/o64-clang
+        with:
+          command: build
+          args: --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v3
+        with:
+          name: peridio-cli-${{ matrix.target }}
+          path: target/${{ matrix.target }}/debug/peridio-cli
+
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    env:
+      CARGO_NET_GIT_FETCH_WITH_CLI: true
+    steps:
+      - uses: actions/checkout@v2
+      - uses: webfactory/ssh-agent@v0.5.3
+        with:
+          ssh-private-key: ${{ secrets.REISHI_SSH_KEY }}
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    env:
+      CARGO_NET_GIT_FETCH_WITH_CLI: true
+    steps:
+      - uses: actions/checkout@v2
+      - uses: webfactory/ssh-agent@v0.5.3
+        with:
+          ssh-private-key: ${{ secrets.REISHI_SSH_KEY }}
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    env:
+      CARGO_NET_GIT_FETCH_WITH_CLI: true
+    steps:
+      - uses: actions/checkout@v2
+      - uses: webfactory/ssh-agent@v0.5.3
+        with:
+          ssh-private-key: ${{ secrets.REISHI_SSH_KEY }}
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          components: clippy
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: -- -D warnings
