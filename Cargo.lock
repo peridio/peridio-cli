@@ -5,3 +5,11 @@ version = 3
 [[package]]
 name = "peridio-cli"
 version = "0.1.0"
+dependencies = [
+ "peridio-sdk",
+]
+
+[[package]]
+name = "peridio-sdk"
+version = "0.1.0"
+source = "git+ssh://git@github.com/peridio/reishi.git?branch=main#02fba15ba36c7f76857206e6f560ca748a965673"
