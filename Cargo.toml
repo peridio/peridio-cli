@@ -9,7 +9,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-peridio-sdk = { git = "ssh://git@github.com/peridio/reishi.git", rev = "5ee2b27"}
+peridio-sdk = { git = "ssh://git@github.com/peridio/reishi.git", rev = "b2a2032"}
 structopt = "0.3"
 tokio = { version = "1.4", features = ["full"] }
 tonic = {version = "0.6", features = ["compression"]}
