@@ -500,7 +500,7 @@ dependencies = [
 [[package]]
 name = "peridio-sdk"
 version = "0.1.0"
-source = "git+ssh://git@github.com/peridio/reishi.git?rev=5ee2b27#5ee2b274cb6a76ffe3e505f175c99ce100248ec6"
+source = "git+ssh://git@github.com/peridio/reishi.git?rev=b2a2032#b2a20327b29dcbe387b6c944df32e6f34bd952a1"
 dependencies = [
  "prost",
  "prost-build",

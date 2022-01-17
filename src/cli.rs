@@ -72,7 +72,16 @@ pub struct NodeOpts {
 pub enum NodeCommand {
     #[structopt(name = "state")]
     State(StateOpts),
+
+    #[structopt(name = "update")]
+    Update(UpdateOpts),
 }
 
 #[derive(StructOpt, Debug)]
 pub struct StateOpts {}
+
+#[derive(StructOpt, Debug)]
+pub struct UpdateOpts {
+    #[structopt(long = "base-url")]
+    pub base_url: String,
+}
