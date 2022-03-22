@@ -7,7 +7,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-peridio-sdk = { git = "ssh://git@github.com/peridio/reishi.git", rev = "d7960d2"}
+peridio-sdk = { git = "ssh://git@github.com/peridio/reishi.git", rev = "1df9bec"}
 structopt = "0.3"
 tokio = { version = "1.4", features = ["full"] }
 tonic = {version = "0.6", features = ["compression"]}
