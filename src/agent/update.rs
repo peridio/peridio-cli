@@ -1,5 +1,5 @@
-use super::Command;
-use peridio_sdk::node_client::NodeClient;
+use super::{util, Command};
+use peridio_sdk::agent::Error;
 use peridio_sdk::NodeUpdateRequest;
 use structopt::StructOpt;
 
@@ -9,24 +9,14 @@ pub struct Update {
     pub base_url: String,
 }
 
-pub(super) async fn run(cmd: Command<Update>) {
-    let channel =
-        match peridio_sdk::channel(cmd.socket_path.clone(), cmd.socket_addr, cmd.socket_port).await
-        {
-            Err(e) => {
-                println!("Error connecting to node\n{}", e);
-                return;
-            }
-            Ok(channel) => channel,
-        };
-
-    let mut client = NodeClient::new(channel);
+pub(super) async fn run(cmd: Command<Update>) -> Result<(), Error> {
+    let mut client = util::create_client(&cmd).await?;
     let request = tonic::Request::new(NodeUpdateRequest {
         base_url: (*cmd.base_url).to_string(),
     });
 
-    match client.update(request).await {
-        Ok(response) => println!("{:?}", response.into_inner()),
-        Err(e) => println!("{}", e),
-    }
+    let response = client.update(request).await?;
+    println!("{:?}", response.into_inner());
+
+    Ok(())
 }
