@@ -15,6 +15,9 @@ pub enum ElementCommand {
 
     /// List elements
     List(ListCommand),
+
+    /// Get an element
+    Get(GetCommand),
 }
 
 impl Command<ElementCommand> {
@@ -25,6 +28,7 @@ impl Command<ElementCommand> {
             ElementCommand::Create(cmd) => cmd.run(api).await,
             ElementCommand::Update(cmd) => cmd.run(api).await,
             ElementCommand::List(cmd) => cmd.run(api).await,
+            ElementCommand::Get(cmd) => cmd.run(api).await,
         }
     }
 }
@@ -80,6 +84,20 @@ impl ListCommand {
     async fn run(&self, api: Api) -> Result<(), Error> {
         let elements = api.elements().list().await?;
         println!("{:?}", elements);
+
+        Ok(())
+    }
+}
+
+#[derive(StructOpt, Debug)]
+pub struct GetCommand {
+    id: String,
+}
+
+impl GetCommand {
+    async fn run(&self, api: Api) -> Result<(), Error> {
+        let element = api.element(&self.id).get().await?;
+        println!("{:?}", element);
 
         Ok(())
     }
