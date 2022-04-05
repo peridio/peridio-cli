@@ -1,6 +1,8 @@
 mod identity;
 
 use std::ops::Deref;
+
+use snafu::ResultExt;
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
@@ -30,9 +32,9 @@ pub enum ApiCommand {
 }
 
 impl ApiCommand {
-    pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) async fn run(self) -> Result<(), crate::Error> {
         match self {
-            ApiCommand::Identity(cmd) => identity::run(cmd).await?,
+            ApiCommand::Identity(cmd) => identity::run(cmd).await.context(crate::ApiSnafu)?,
         };
 
         Ok(())

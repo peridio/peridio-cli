@@ -1,7 +1,26 @@
 mod agent;
 mod api;
 
+use std::fmt;
+
+use snafu::Snafu;
 use structopt::StructOpt;
+
+#[derive(Snafu)]
+#[snafu(visibility(pub(crate)))]
+enum Error {
+    #[snafu(display("Agent error {}", source))]
+    Agent { source: peridio_sdk::agent::Error },
+
+    #[snafu(display("Api error {}", source))]
+    Api { source: peridio_sdk::api::Error },
+}
+
+impl fmt::Debug for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
 
 #[derive(StructOpt)]
 struct Program {
@@ -10,7 +29,7 @@ struct Program {
 }
 
 impl Program {
-    async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
+    async fn run(self) -> Result<(), Error> {
         match self.command {
             Command::Api(cmd) => cmd.run().await?,
             Command::Node(cmd) => cmd.run().await?,
@@ -31,6 +50,6 @@ enum Command {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Error> {
     Program::from_args().run().await
 }

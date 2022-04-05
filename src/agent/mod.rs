@@ -1,9 +1,12 @@
 mod state;
 mod update;
+mod util;
 
-use std::net::IpAddr;
+use std::net::SocketAddr;
 use std::ops::Deref;
 use std::path::PathBuf;
+
+use snafu::ResultExt;
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
@@ -11,11 +14,9 @@ pub struct Command<T: StructOpt> {
     #[structopt(long, parse(from_os_str), required_unless = "socket-addr")]
     pub socket_path: Option<PathBuf>,
 
-    #[structopt(long, required_unless = "socket-path", requires = "socket-port")]
-    pub socket_addr: Option<IpAddr>,
-
-    #[structopt(long, requires = "socket-addr")]
-    pub socket_port: Option<u16>,
+    /// 127.0.0.1:8080 or [::1]:8080
+    #[structopt(long, parse(try_from_str), required_unless = "socket-path")]
+    pub socket_addr: Option<SocketAddr>,
 
     #[structopt(flatten)]
     inner: T,
@@ -38,11 +39,13 @@ pub enum AgentCommand {
 }
 
 impl AgentCommand {
-    pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
-        match self {
+    pub(crate) async fn run(self) -> Result<(), crate::Error> {
+        let result = match self {
             Self::State(cmd) => state::run(cmd).await,
             Self::Update(cmd) => update::run(cmd).await,
         };
+
+        result.context(crate::AgentSnafu)?;
 
         Ok(())
     }
