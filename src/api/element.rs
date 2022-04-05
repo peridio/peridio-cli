@@ -12,6 +12,9 @@ pub enum ElementCommand {
 
     /// Update an element
     Update(UpdateCommand),
+
+    /// List elements
+    List(ListCommand),
 }
 
 impl Command<ElementCommand> {
@@ -21,6 +24,7 @@ impl Command<ElementCommand> {
         match &self.inner {
             ElementCommand::Create(cmd) => cmd.run(api).await,
             ElementCommand::Update(cmd) => cmd.run(api).await,
+            ElementCommand::List(cmd) => cmd.run(api).await,
         }
     }
 }
@@ -64,6 +68,18 @@ impl UpdateCommand {
 
         let element = api.element(&self.id).update(changeset).await?;
         println!("{:?}", element);
+
+        Ok(())
+    }
+}
+
+#[derive(StructOpt, Debug)]
+pub struct ListCommand {}
+
+impl ListCommand {
+    async fn run(&self, api: Api) -> Result<(), Error> {
+        let elements = api.elements().list().await?;
+        println!("{:?}", elements);
 
         Ok(())
     }
