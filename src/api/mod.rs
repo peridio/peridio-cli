@@ -1,3 +1,4 @@
+mod element;
 mod identity;
 
 use std::ops::Deref;
@@ -29,12 +30,16 @@ impl<T: StructOpt> Deref for Command<T> {
 pub enum ApiCommand {
     /// Retrieve identity
     Identity(Command<identity::IdentityCommand>),
+
+    /// Operate on elements
+    Elements(Command<element::ElementCommand>),
 }
 
 impl ApiCommand {
     pub(crate) async fn run(self) -> Result<(), crate::Error> {
         match self {
             ApiCommand::Identity(cmd) => identity::run(cmd).await.context(crate::ApiSnafu)?,
+            ApiCommand::Elements(cmd) => cmd.run().await.context(crate::ApiSnafu)?,
         };
 
         Ok(())
