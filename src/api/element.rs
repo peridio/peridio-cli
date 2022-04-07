@@ -9,6 +9,9 @@ use structopt::StructOpt;
 pub enum ElementCommand {
     /// Create an element
     Create(CreateCommand),
+
+    /// Update an element
+    Update(UpdateCommand),
 }
 
 impl Command<ElementCommand> {
@@ -17,6 +20,7 @@ impl Command<ElementCommand> {
 
         match &self.inner {
             ElementCommand::Create(cmd) => cmd.run(api).await,
+            ElementCommand::Update(cmd) => cmd.run(api).await,
         }
     }
 }
@@ -35,6 +39,30 @@ impl CreateCommand {
         };
 
         let element = api.elements().create(element).await?;
+        println!("{:?}", element);
+
+        Ok(())
+    }
+}
+
+#[derive(StructOpt, Debug)]
+pub struct UpdateCommand {
+    /// An element id
+    #[structopt(long)]
+    id: String,
+
+    /// An element name
+    #[structopt(long)]
+    name: String,
+}
+
+impl UpdateCommand {
+    async fn run(&self, api: Api) -> Result<(), Error> {
+        let changeset = element::ElementChangeset {
+            name: self.name.clone(),
+        };
+
+        let element = api.element(&self.id).update(changeset).await?;
         println!("{:?}", element);
 
         Ok(())
