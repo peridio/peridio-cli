@@ -1,3 +1,4 @@
+use super::element_version::ElementVersionCommand;
 use super::Command;
 use peridio_sdk::{
     api::{element, Error},
@@ -18,6 +19,9 @@ pub enum ElementCommand {
 
     /// Get an element
     Get(GetCommand),
+
+    /// Operate on versions
+    Versions(ElementVersionCommand),
 }
 
 impl Command<ElementCommand> {
@@ -29,6 +33,7 @@ impl Command<ElementCommand> {
             ElementCommand::Update(cmd) => cmd.run(api).await,
             ElementCommand::List(cmd) => cmd.run(api).await,
             ElementCommand::Get(cmd) => cmd.run(api).await,
+            ElementCommand::Versions(cmd) => cmd.run(api).await,
         }
     }
 }
