@@ -16,12 +16,14 @@ pub struct VersionCommand<T: StructOpt> {
 #[derive(StructOpt, Debug)]
 pub enum ElementVersionCommand {
     Create(VersionCommand<CreateCommand>),
+    Get(VersionCommand<GetCommand>),
 }
 
 impl ElementVersionCommand {
     pub async fn run(&self, api: Api) -> Result<(), Error> {
         match self {
             Self::Create(cmd) => cmd.run(api).await,
+            Self::Get(cmd) => cmd.run(api).await,
         }
     }
 }
@@ -42,6 +44,25 @@ impl VersionCommand<CreateCommand> {
             .element(&self.element_id)
             .versions()
             .create(version)
+            .await?;
+
+        println!("{:?}", version);
+
+        Ok(())
+    }
+}
+
+#[derive(StructOpt, Debug)]
+pub struct GetCommand {
+    id: String,
+}
+
+impl VersionCommand<GetCommand> {
+    async fn run(&self, api: Api) -> Result<(), Error> {
+        let version = api
+            .element(&self.element_id)
+            .version(&self.inner.id)
+            .get()
             .await?;
 
         println!("{:?}", version);
