@@ -1,39 +1,36 @@
-use super::element_version::ElementVersionCommand;
+use super::version::VersionCommand;
 use super::Command;
-use peridio_sdk::{
-    api::{element, Error},
-    Api,
-};
+use crate::{print_json, ApiSnafu, Error};
+use peridio_sdk::api::{Api, ElementChangeset};
+use snafu::ResultExt;
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
 pub enum ElementCommand {
     /// Create an element
-    Create(CreateCommand),
+    Create(Command<CreateCommand>),
 
     /// Update an element
-    Update(UpdateCommand),
+    Update(Command<UpdateCommand>),
 
     /// List elements
-    List(ListCommand),
+    List(Command<ListCommand>),
 
     /// Get an element
-    Get(GetCommand),
+    Get(Command<GetCommand>),
 
     /// Operate on versions
-    Versions(ElementVersionCommand),
+    Version(VersionCommand),
 }
 
-impl Command<ElementCommand> {
+impl ElementCommand {
     pub async fn run(self) -> Result<(), Error> {
-        let api = Api::new(self.api_key, self.base_url);
-
-        match &self.inner {
-            ElementCommand::Create(cmd) => cmd.run(api).await,
-            ElementCommand::Update(cmd) => cmd.run(api).await,
-            ElementCommand::List(cmd) => cmd.run(api).await,
-            ElementCommand::Get(cmd) => cmd.run(api).await,
-            ElementCommand::Versions(cmd) => cmd.run(api).await,
+        match self {
+            Self::Create(cmd) => cmd.run().await,
+            Self::Update(cmd) => cmd.run().await,
+            Self::List(cmd) => cmd.run().await,
+            Self::Get(cmd) => cmd.run().await,
+            Self::Version(cmd) => cmd.run().await,
         }
     }
 }
@@ -45,14 +42,16 @@ pub struct CreateCommand {
     name: String,
 }
 
-impl CreateCommand {
-    async fn run(&self, api: Api) -> Result<(), Error> {
-        let element = element::ElementChangeset {
-            name: self.name.clone(),
+impl Command<CreateCommand> {
+    async fn run(self) -> Result<(), Error> {
+        let api = Api::new(self.api_key, self.base_url);
+        let element = ElementChangeset {
+            name: self.inner.name,
         };
 
-        let element = api.elements().create(element).await?;
-        println!("{:?}", element);
+        let element = api.elements().create(element).await.context(ApiSnafu)?;
+
+        print_json!(&element);
 
         Ok(())
     }
@@ -69,14 +68,20 @@ pub struct UpdateCommand {
     name: String,
 }
 
-impl UpdateCommand {
-    async fn run(&self, api: Api) -> Result<(), Error> {
-        let changeset = element::ElementChangeset {
-            name: self.name.clone(),
+impl Command<UpdateCommand> {
+    async fn run(self) -> Result<(), Error> {
+        let api = Api::new(self.api_key, self.base_url);
+        let changeset = ElementChangeset {
+            name: self.inner.name,
         };
 
-        let element = api.element(&self.id).update(changeset).await?;
-        println!("{:?}", element);
+        let element = api
+            .element(&self.inner.id)
+            .update(changeset)
+            .await
+            .context(ApiSnafu)?;
+
+        print_json!(&element);
 
         Ok(())
     }
@@ -85,10 +90,12 @@ impl UpdateCommand {
 #[derive(StructOpt, Debug)]
 pub struct ListCommand {}
 
-impl ListCommand {
-    async fn run(&self, api: Api) -> Result<(), Error> {
-        let elements = api.elements().list().await?;
-        println!("{:?}", elements);
+impl Command<ListCommand> {
+    async fn run(self) -> Result<(), Error> {
+        let api = Api::new(self.api_key, self.base_url);
+        let elements = api.elements().list().await.context(ApiSnafu)?;
+
+        print_json!(&elements);
 
         Ok(())
     }
@@ -96,13 +103,17 @@ impl ListCommand {
 
 #[derive(StructOpt, Debug)]
 pub struct GetCommand {
+    /// An element id
+    #[structopt(long)]
     id: String,
 }
 
-impl GetCommand {
-    async fn run(&self, api: Api) -> Result<(), Error> {
-        let element = api.element(&self.id).get().await?;
-        println!("{:?}", element);
+impl Command<GetCommand> {
+    async fn run(self) -> Result<(), Error> {
+        let api = Api::new(self.api_key, self.base_url);
+        let element = api.element(&self.inner.id).get().await.context(ApiSnafu)?;
+
+        print_json!(&element);
 
         Ok(())
     }

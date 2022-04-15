@@ -1,10 +1,7 @@
 mod element;
-mod element_version;
 mod identity;
+mod version;
 
-use std::ops::Deref;
-
-use snafu::ResultExt;
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
@@ -19,28 +16,20 @@ pub struct Command<T: StructOpt> {
     inner: T,
 }
 
-impl<T: StructOpt> Deref for Command<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
 #[derive(StructOpt, Debug)]
 pub enum ApiCommand {
     /// Retrieve identity
     Identity(Command<identity::IdentityCommand>),
 
     /// Operate on elements
-    Elements(Command<element::ElementCommand>),
+    Element(element::ElementCommand),
 }
 
 impl ApiCommand {
     pub(crate) async fn run(self) -> Result<(), crate::Error> {
         match self {
-            ApiCommand::Identity(cmd) => identity::run(cmd).await.context(crate::ApiSnafu)?,
-            ApiCommand::Elements(cmd) => cmd.run().await.context(crate::ApiSnafu)?,
+            ApiCommand::Identity(cmd) => identity::run(cmd).await?,
+            ApiCommand::Element(cmd) => cmd.run().await?,
         };
 
         Ok(())

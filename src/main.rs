@@ -6,14 +6,27 @@ use std::fmt;
 use snafu::Snafu;
 use structopt::StructOpt;
 
+#[macro_export]
+macro_rules! print_json {
+    ($v:expr) => {
+        println!(
+            "{}",
+            serde_json::to_string($v).context(crate::JsonSerializationSnafu)?
+        );
+    };
+}
+
 #[derive(Snafu)]
 #[snafu(visibility(pub(crate)))]
-enum Error {
+pub enum Error {
     #[snafu(display("Agent error {}", source))]
     Agent { source: peridio_sdk::agent::Error },
 
     #[snafu(display("Api error {}", source))]
     Api { source: peridio_sdk::api::Error },
+
+    #[snafu(display("Unable to serialize to JSON {}", source))]
+    JsonSerialization { source: serde_json::Error },
 }
 
 impl fmt::Debug for Error {

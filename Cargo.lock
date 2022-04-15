@@ -327,7 +327,7 @@ dependencies = [
  "indexmap",
  "slab",
  "tokio",
- "tokio-util",
+ "tokio-util 0.7.1",
  "tracing",
 ]
 
@@ -682,6 +682,7 @@ name = "peridio-cli"
 version = "0.1.0"
 dependencies = [
  "peridio-sdk",
+ "serde_json",
  "snafu",
  "structopt",
  "tokio",
@@ -692,15 +693,17 @@ dependencies = [
 [[package]]
 name = "peridio-sdk"
 version = "0.1.0"
-source = "git+ssh://git@github.com/peridio/reishi.git?rev=a2fc27c#a2fc27ccb25b5b5d307df1eb0fce4a73c874345c"
+source = "git+ssh://git@github.com/peridio/reishi.git?rev=1599a98#1599a98fdb79699a1e84216a5a89b2ccbd0b4ca0"
 dependencies = [
  "chrono",
  "prost",
  "prost-build",
  "reqwest",
  "serde",
+ "serde_json",
  "snafu",
  "tokio",
+ "tokio-util 0.7.1",
  "tonic",
  "tonic-build",
  "tower",
@@ -954,6 +957,7 @@ dependencies = [
  "serde_urlencoded",
  "tokio",
  "tokio-rustls",
+ "tokio-util 0.6.9",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -1282,6 +1286,20 @@ dependencies = [
 
 [[package]]
 name = "tokio-util"
+version = "0.6.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e99e1983e5d376cd8eb4b66604d2e99e79f5bd988c3055891dcd8c9e2604cc0"
+dependencies = [
+ "bytes",
+ "futures-core",
+ "futures-sink",
+ "log",
+ "pin-project-lite",
+ "tokio",
+]
+
+[[package]]
+name = "tokio-util"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0edfdeb067411dba2044da6d1cb2df793dd35add7888d73c16e3381ded401764"
@@ -1319,7 +1337,7 @@ dependencies = [
  "prost-derive",
  "tokio",
  "tokio-stream",
- "tokio-util",
+ "tokio-util 0.7.1",
  "tower",
  "tower-layer",
  "tower-service",
@@ -1354,7 +1372,7 @@ dependencies = [
  "rand",
  "slab",
  "tokio",
- "tokio-util",
+ "tokio-util 0.7.1",
  "tower-layer",
  "tower-service",
  "tracing",
