@@ -15,6 +15,9 @@ pub enum BinaryCommand {
 
     /// Get a binary
     Get(Command<GetCommand>),
+
+    /// List binaries
+    List(Command<ListCommand>),
 }
 
 impl BinaryCommand {
@@ -22,6 +25,7 @@ impl BinaryCommand {
         match self {
             Self::Create(cmd) => cmd.run().await,
             Self::Get(cmd) => cmd.run().await,
+            Self::List(cmd) => cmd.run().await,
         }
     }
 }
@@ -93,6 +97,35 @@ impl Command<GetCommand> {
             .context(ApiSnafu)?;
 
         print_json!(&binary);
+
+        Ok(())
+    }
+}
+
+#[derive(StructOpt, Debug)]
+pub struct ListCommand {
+    /// An element id
+    #[structopt(long)]
+    pub element_id: String,
+
+    /// A version id
+    #[structopt(long)]
+    pub version_id: String,
+}
+
+impl Command<ListCommand> {
+    async fn run(self) -> Result<(), Error> {
+        let api = Api::new(self.api_key, self.base_url);
+
+        let binaries = api
+            .element(&self.inner.element_id)
+            .version(&self.inner.version_id)
+            .binaries()
+            .list()
+            .await
+            .context(ApiSnafu)?;
+
+        print_json!(&binaries);
 
         Ok(())
     }
