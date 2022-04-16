@@ -12,12 +12,16 @@ use tokio::io::{self, AsyncRead};
 pub enum BinaryCommand {
     /// Create a binary
     Create(Command<CreateCommand>),
+
+    /// Get a binary
+    Get(Command<GetCommand>),
 }
 
 impl BinaryCommand {
     pub async fn run(self) -> Result<(), Error> {
         match self {
             Self::Create(cmd) => cmd.run().await,
+            Self::Get(cmd) => cmd.run().await,
         }
     }
 }
@@ -52,6 +56,39 @@ impl Command<CreateCommand> {
             .version(&self.inner.version_id)
             .binaries()
             .create(rdr)
+            .await
+            .context(ApiSnafu)?;
+
+        print_json!(&binary);
+
+        Ok(())
+    }
+}
+
+#[derive(StructOpt, Debug)]
+pub struct GetCommand {
+    /// An element id
+    #[structopt(long)]
+    pub element_id: String,
+
+    /// A version id
+    #[structopt(long)]
+    pub version_id: String,
+
+    /// A binary id
+    #[structopt(long)]
+    pub binary_id: String,
+}
+
+impl Command<GetCommand> {
+    async fn run(self) -> Result<(), Error> {
+        let api = Api::new(self.api_key, self.base_url);
+
+        let binary = api
+            .element(&self.inner.element_id)
+            .version(&self.inner.version_id)
+            .binary(&self.inner.binary_id)
+            .get()
             .await
             .context(ApiSnafu)?;
 
