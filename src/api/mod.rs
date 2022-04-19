@@ -1,3 +1,4 @@
+mod binary;
 mod element;
 mod identity;
 mod version;

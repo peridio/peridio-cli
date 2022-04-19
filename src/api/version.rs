@@ -1,3 +1,4 @@
+use super::binary::BinaryCommand;
 use super::Command;
 use crate::{print_json, ApiSnafu, Error};
 use peridio_sdk::api::{Api, VersionChangeset};
@@ -14,6 +15,9 @@ pub enum VersionCommand {
 
     /// List versions
     List(Command<ListCommand>),
+
+    /// Operate on binaries
+    Binary(BinaryCommand),
 }
 
 impl VersionCommand {
@@ -22,6 +26,7 @@ impl VersionCommand {
             Self::Create(cmd) => cmd.run().await,
             Self::Get(cmd) => cmd.run().await,
             Self::List(cmd) => cmd.run().await,
+            Self::Binary(cmd) => cmd.run().await,
         }
     }
 }

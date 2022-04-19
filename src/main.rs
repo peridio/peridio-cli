@@ -1,7 +1,7 @@
 mod agent;
 mod api;
 
-use std::fmt;
+use std::{fmt, io};
 
 use snafu::Snafu;
 use structopt::StructOpt;
@@ -27,6 +27,9 @@ pub enum Error {
 
     #[snafu(display("Unable to serialize to JSON {}", source))]
     JsonSerialization { source: serde_json::Error },
+
+    #[snafu(display("Unable to open file {}", source))]
+    File { source: io::Error },
 }
 
 impl fmt::Debug for Error {
