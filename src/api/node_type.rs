@@ -12,6 +12,9 @@ pub enum NodeTypeCommand {
     /// Get a node-type
     Get(Command<GetCommand>),
 
+    /// Update a node-type
+    Update(Command<UpdateCommand>),
+
     /// List node-types
     List(Command<ListCommand>),
 }
@@ -21,6 +24,7 @@ impl NodeTypeCommand {
         match self {
             Self::Create(cmd) => cmd.run().await,
             Self::Get(cmd) => cmd.run().await,
+            Self::Update(cmd) => cmd.run().await,
             Self::List(cmd) => cmd.run().await,
         }
     }
@@ -61,6 +65,36 @@ impl Command<GetCommand> {
         let node_type = api
             .node_type(&self.inner.id)
             .get()
+            .await
+            .context(ApiSnafu)?;
+
+        print_json!(&node_type);
+
+        Ok(())
+    }
+}
+
+#[derive(StructOpt, Debug)]
+pub struct UpdateCommand {
+    /// An element id
+    #[structopt(long)]
+    id: String,
+
+    /// An element name
+    #[structopt(long)]
+    name: String,
+}
+
+impl Command<UpdateCommand> {
+    async fn run(self) -> Result<(), Error> {
+        let api = Api::new(self.api_key, self.base_url);
+        let changeset = NodeTypeChangeset {
+            name: self.inner.name,
+        };
+
+        let node_type = api
+            .node_type(&self.inner.id)
+            .update(changeset)
             .await
             .context(ApiSnafu)?;
 
