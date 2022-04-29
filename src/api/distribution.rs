@@ -8,12 +8,16 @@ use structopt::StructOpt;
 pub enum DistributionCommand {
     /// Create a distribution
     Create(Command<CreateCommand>),
+
+    /// List distributions
+    List(Command<ListCommand>),
 }
 
 impl DistributionCommand {
     pub async fn run(self) -> Result<(), Error> {
         match self {
             Self::Create(cmd) => cmd.run().await,
+            Self::List(cmd) => cmd.run().await,
         }
     }
 }
@@ -54,6 +58,20 @@ impl Command<CreateCommand> {
             .context(ApiSnafu)?;
 
         print_json!(&distribution);
+
+        Ok(())
+    }
+}
+
+#[derive(StructOpt, Debug)]
+pub struct ListCommand {}
+
+impl Command<ListCommand> {
+    async fn run(self) -> Result<(), Error> {
+        let api = Api::new(self.api_key, self.base_url);
+        let distributions = api.distributions().list().await.context(ApiSnafu)?;
+
+        print_json!(&distributions);
 
         Ok(())
     }
