@@ -1,6 +1,7 @@
 mod binary;
 mod element;
 mod identity;
+mod node_type;
 mod version;
 
 use structopt::StructOpt;
@@ -24,6 +25,9 @@ pub enum ApiCommand {
 
     /// Operate on elements
     Element(element::ElementCommand),
+
+    /// Operate on node-types
+    NodeType(node_type::NodeTypeCommand),
 }
 
 impl ApiCommand {
@@ -31,6 +35,7 @@ impl ApiCommand {
         match self {
             ApiCommand::Identity(cmd) => identity::run(cmd).await?,
             ApiCommand::Element(cmd) => cmd.run().await?,
+            ApiCommand::NodeType(cmd) => cmd.run().await?,
         };
 
         Ok(())
