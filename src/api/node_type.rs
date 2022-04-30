@@ -9,6 +9,9 @@ pub enum NodeTypeCommand {
     /// Create a node-type
     Create(Command<CreateCommand>),
 
+    /// Get a node-type
+    Get(Command<GetCommand>),
+
     /// List node-types
     List(Command<ListCommand>),
 }
@@ -17,6 +20,7 @@ impl NodeTypeCommand {
     pub async fn run(self) -> Result<(), Error> {
         match self {
             Self::Create(cmd) => cmd.run().await,
+            Self::Get(cmd) => cmd.run().await,
             Self::List(cmd) => cmd.run().await,
         }
     }
@@ -37,6 +41,28 @@ impl Command<CreateCommand> {
         };
 
         let node_type = api.node_types().create(node_type).await.context(ApiSnafu)?;
+
+        print_json!(&node_type);
+
+        Ok(())
+    }
+}
+
+#[derive(StructOpt, Debug)]
+pub struct GetCommand {
+    /// A node-type id
+    #[structopt(long)]
+    id: String,
+}
+
+impl Command<GetCommand> {
+    async fn run(self) -> Result<(), Error> {
+        let api = Api::new(self.api_key, self.base_url);
+        let node_type = api
+            .node_type(&self.inner.id)
+            .get()
+            .await
+            .context(ApiSnafu)?;
 
         print_json!(&node_type);
 
