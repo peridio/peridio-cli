@@ -1,4 +1,5 @@
 mod binary;
+mod distribution;
 mod element;
 mod identity;
 mod node_type;
@@ -28,6 +29,9 @@ pub enum ApiCommand {
 
     /// Operate on node-types
     NodeType(node_type::NodeTypeCommand),
+
+    /// Operate on distributions
+    Distribution(distribution::DistributionCommand),
 }
 
 impl ApiCommand {
@@ -36,6 +40,7 @@ impl ApiCommand {
             ApiCommand::Identity(cmd) => identity::run(cmd).await?,
             ApiCommand::Element(cmd) => cmd.run().await?,
             ApiCommand::NodeType(cmd) => cmd.run().await?,
+            ApiCommand::Distribution(cmd) => cmd.run().await?,
         };
 
         Ok(())
