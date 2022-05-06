@@ -9,6 +9,9 @@ pub enum DistributionCommand {
     /// Create a distribution
     Create(Command<CreateCommand>),
 
+    /// Get a distribution
+    Get(Command<GetCommand>),
+
     /// List distributions
     List(Command<ListCommand>),
 }
@@ -17,6 +20,7 @@ impl DistributionCommand {
     pub async fn run(self) -> Result<(), Error> {
         match self {
             Self::Create(cmd) => cmd.run().await,
+            Self::Get(cmd) => cmd.run().await,
             Self::List(cmd) => cmd.run().await,
         }
     }
@@ -54,6 +58,28 @@ impl Command<CreateCommand> {
         let distribution = api
             .distributions()
             .create(distribution)
+            .await
+            .context(ApiSnafu)?;
+
+        print_json!(&distribution);
+
+        Ok(())
+    }
+}
+
+#[derive(StructOpt, Debug)]
+pub struct GetCommand {
+    /// A distribution id
+    #[structopt(long)]
+    id: String,
+}
+
+impl Command<GetCommand> {
+    async fn run(self) -> Result<(), Error> {
+        let api = Api::new(self.api_key, self.base_url);
+        let distribution = api
+            .distribution(&self.inner.id)
+            .get()
             .await
             .context(ApiSnafu)?;
 
