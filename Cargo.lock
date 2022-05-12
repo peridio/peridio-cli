@@ -743,7 +743,7 @@ dependencies = [
 [[package]]
 name = "peridio-sdk"
 version = "0.1.0"
-source = "git+ssh://git@github.com/peridio/reishi.git?rev=ca826e7#ca826e738c23c88653a15e3838cee24f4dcf4fd2"
+source = "git+ssh://git@github.com/peridio/reishi.git?rev=3c57a04#3c57a0486767423513077d54ff3364625c6559a4"
 dependencies = [
  "async-stream",
  "bytes",
