@@ -1,7 +1,7 @@
 mod agent;
 mod api;
 
-use std::{fmt, io};
+use std::{fmt, io, path};
 
 use snafu::Snafu;
 use structopt::StructOpt;
@@ -30,6 +30,12 @@ pub enum Error {
 
     #[snafu(display("Unable to open file {}", source))]
     File { source: io::Error },
+
+    #[snafu(display("File {:?} is empty", path))]
+    EmptyFile { path: path::PathBuf },
+
+    #[snafu(display("Unable to retrieve file metadata {:?}", source))]
+    FileMetadata { source: io::Error },
 }
 
 impl fmt::Debug for Error {

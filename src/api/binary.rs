@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use super::Command;
-use crate::{print_json, ApiSnafu, Error, FileSnafu};
+use crate::{print_json, ApiSnafu, Error, FileMetadataSnafu, FileSnafu};
 use peridio_sdk::api::Api;
 use snafu::ResultExt;
 use structopt::StructOpt;
@@ -33,7 +33,7 @@ impl BinaryCommand {
 #[derive(StructOpt, Debug)]
 pub struct CreateCommand {
     /// A path to a local binary.
-    /// If no file is provided, reads from standard input
+    /// If no file is provided, then the standard input is read.
     #[structopt(long, parse(from_os_str))]
     pub file: Option<PathBuf>,
 
@@ -50,8 +50,8 @@ impl Command<CreateCommand> {
     async fn run(self) -> Result<(), Error> {
         let api = Api::new(self.api_key, self.base_url);
 
-        let rdr: Box<dyn AsyncRead + Sync + Send + Unpin> = match &self.inner.file {
-            Some(v) => Box::new(File::open(v).await.context(FileSnafu)?),
+        let rdr: Box<dyn AsyncRead + Sync + Send + Unpin> = match self.inner.file {
+            Some(path) => Box::new(validate_file(&path).await?),
             None => Box::new(io::stdin()),
         };
 
@@ -128,5 +128,18 @@ impl Command<ListCommand> {
         print_json!(&binaries);
 
         Ok(())
+    }
+}
+
+async fn validate_file(path: &PathBuf) -> Result<File, Error> {
+    let file = File::open(path).await.context(FileSnafu)?;
+
+    let metadata = file.metadata().await.context(FileMetadataSnafu)?;
+
+    match metadata.len() {
+        0 => Err(Error::EmptyFile {
+            path: path.to_owned(),
+        }),
+        _ => Ok(file),
     }
 }
