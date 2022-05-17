@@ -53,8 +53,8 @@ impl Command<CreateCommand> {
     async fn run(self) -> Result<(), Error> {
         let api = Api::new(self.api_key, self.base_url);
         let distribution = DistributionChangeset {
-            name: self.inner.name,
-            element_version_id: self.inner.element_version_id,
+            name: Some(self.inner.name),
+            element_version_id: Some(self.inner.element_version_id),
             next_distribution_id: self.inner.next_distribution_id,
             node_group_id: self.inner.node_group_id,
         };
@@ -101,7 +101,7 @@ pub struct UpdateCommand {
 
     /// A distribution name
     #[structopt(long)]
-    name: String,
+    name: Option<String>,
 
     /// A parent distribution id
     #[structopt(long)]
