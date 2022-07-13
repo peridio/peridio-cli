@@ -1,4 +1,3 @@
-mod agent;
 mod api;
 
 use std::{fmt, io, path};
@@ -7,22 +6,20 @@ use snafu::Snafu;
 use structopt::StructOpt;
 
 #[macro_export]
+#[allow(clippy::crate_in_macro_def)]
 macro_rules! print_json {
     ($v:expr) => {
         println!(
             "{}",
             serde_json::to_string($v).context(crate::JsonSerializationSnafu)?
-        );
+        )
     };
 }
 
 #[derive(Snafu)]
 #[snafu(visibility(pub(crate)))]
 pub enum Error {
-    #[snafu(display("Agent error {}", source))]
-    Agent { source: peridio_sdk::agent::Error },
-
-    #[snafu(display("Api error {}", source))]
+    #[snafu(display("{}", source))]
     Api { source: peridio_sdk::api::Error },
 
     #[snafu(display("Unable to serialize to JSON {}", source))]
@@ -55,7 +52,6 @@ impl Program {
     async fn run(self) -> Result<(), Error> {
         match self.command {
             Command::Api(cmd) => cmd.run().await?,
-            Command::Node(cmd) => cmd.run().await?,
         };
 
         Ok(())
@@ -67,12 +63,15 @@ impl Program {
 enum Command {
     #[structopt(flatten)]
     Api(api::ApiCommand),
-
-    /// Interact with local or network connected nodes
-    Node(agent::AgentCommand),
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Error> {
-    Program::from_args().run().await
+async fn main() {
+    if let Err(e) = Program::from_args().run().await {
+        match e {
+            Error::Api { source } => eprintln!("{}", source),
+
+            error => eprintln!("Error: {}", error),
+        }
+    }
 }

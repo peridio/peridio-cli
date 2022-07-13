@@ -1,9 +1,5 @@
-mod binary;
-mod distribution;
-mod element;
-mod identity;
-mod node_type;
-mod version;
+mod signing_keys;
+mod users;
 
 use structopt::StructOpt;
 
@@ -21,26 +17,15 @@ pub struct Command<T: StructOpt> {
 
 #[derive(StructOpt, Debug)]
 pub enum ApiCommand {
-    /// Retrieve identity
-    Identity(Command<identity::IdentityCommand>),
-
-    /// Operate on elements
-    Element(element::ElementCommand),
-
-    /// Operate on node-types
-    NodeType(node_type::NodeTypeCommand),
-
-    /// Operate on distributions
-    Distribution(distribution::DistributionCommand),
+    SigningKeys(signing_keys::SigningKeysCommand),
+    Users(users::UsersCommand),
 }
 
 impl ApiCommand {
     pub(crate) async fn run(self) -> Result<(), crate::Error> {
         match self {
-            ApiCommand::Identity(cmd) => identity::run(cmd).await?,
-            ApiCommand::Element(cmd) => cmd.run().await?,
-            ApiCommand::NodeType(cmd) => cmd.run().await?,
-            ApiCommand::Distribution(cmd) => cmd.run().await?,
+            ApiCommand::SigningKeys(cmd) => cmd.run().await?,
+            ApiCommand::Users(cmd) => cmd.run().await?,
         };
 
         Ok(())
