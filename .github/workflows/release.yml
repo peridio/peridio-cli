@@ -1,0 +1,100 @@
+on:
+  push:
+    tags:
+      - "*"
+
+jobs:
+  release:
+    runs-on: "${{ matrix.os }}"
+    env:
+      CARGO_NET_GIT_FETCH_WITH_CLI: true
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            suffix: ""
+    steps:
+      - uses: actions/checkout@v3
+      - uses: webfactory/ssh-agent@v0.5.4
+        with:
+          ssh-private-key: ${{ secrets.REISHI_SSH_KEY }}
+      - uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: "${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}"
+      - uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: "${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}"
+      - uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          target: ${{ matrix.target }}
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --target ${{ matrix.target }}
+      - name: Codesign executable
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          # create variables
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          # import certificate
+          echo -n "$MACOS_CERTIFICATE" | base64 --decode --output $CERTIFICATE_PATH
+
+          # create temporary keychain
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security default-keychain -s $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # make cert accesible by codesign
+          security import $CERTIFICATE_PATH -P "$MACOS_CERTIFICATE_PWD" -k $KEYCHAIN_PATH -T /usr/bin/codesign
+
+          # avoid password promtp
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # give permissions
+          chmod +x ./target/${{ matrix.target }}/release/peridio-cli
+
+          # code sign
+          /usr/bin/codesign -s G6EQB4FDGD --deep -v -f --timestamp -o runtime ./target/${{ matrix.target }}/release/peridio-cli
+
+          # verify signing
+          /usr/bin/codesign --verify --verbose --strict ./target/${{ matrix.target }}/release/peridio-cli
+
+          # zip file, notarize tool only works with zip files
+          ditto -c -k --sequesterRsrc --keepParent "./target/${{ matrix.target }}/release/peridio-cli" "./target/${{ matrix.target }}/release/peridio-cli.zip"
+
+          # notarize app
+          xcrun altool --notarize-app \
+             --primary-bundle-id "com.verypossible.peridio.morel" \
+             --username "$APPLE_ID" \
+             --password "$APP_PASSWORD" \
+             --file "./target/${{ matrix.target }}/release/peridio-cli.zip"
+
+          # change file name
+          mv ./target/${{ matrix.target }}/release/peridio-cli ./peridio
+
+          # tar file to keep permissions
+          tar -czf peridio-${{ github.ref_name }}_${{ matrix.target }}.tar.gz ./peridio
+      - name: Upload Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: CHANGELOG.md
+          generate_release_notes: false
+          files: peridio-${{ github.ref_name }}_${{ matrix.target }}.tar.gz
