@@ -1,3 +1,3 @@
 # Morel
 
-Peridio CLI for all Peridio APIs.
+The command line tool (CLI) for Peridio.
