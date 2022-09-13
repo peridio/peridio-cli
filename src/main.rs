@@ -42,7 +42,7 @@ impl fmt::Debug for Error {
 }
 
 #[derive(StructOpt)]
-#[structopt(version = env!("MOREL_VERSION"))]
+#[structopt(name = "peridio", version = env!("MOREL_VERSION"))]
 struct Program {
     #[structopt(subcommand)]
     command: Command,
