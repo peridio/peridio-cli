@@ -1,4 +1,5 @@
 mod signing_keys;
+mod upgrade;
 mod users;
 
 use structopt::StructOpt;
@@ -18,6 +19,8 @@ pub struct Command<T: StructOpt> {
 #[derive(StructOpt, Debug)]
 pub enum ApiCommand {
     SigningKeys(signing_keys::SigningKeysCommand),
+    #[structopt(flatten)]
+    Upgrade(upgrade::UpgradeCommand),
     Users(users::UsersCommand),
 }
 
@@ -26,6 +29,7 @@ impl ApiCommand {
         match self {
             ApiCommand::SigningKeys(cmd) => cmd.run().await?,
             ApiCommand::Users(cmd) => cmd.run().await?,
+            ApiCommand::Upgrade(cmd) => cmd.run().await?,
         };
 
         Ok(())

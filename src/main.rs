@@ -42,7 +42,7 @@ impl fmt::Debug for Error {
 }
 
 #[derive(StructOpt)]
-#[structopt(version = env!("MOREL_VERSION"))]
+#[structopt(name = "peridio", version = env!("MOREL_VERSION"))]
 struct Program {
     #[structopt(subcommand)]
     command: Command,
@@ -59,7 +59,7 @@ impl Program {
 }
 
 #[derive(StructOpt)]
-#[structopt(about = "interact with local or network connected nodes")]
+#[structopt(about = "Work with Peridio from the command line.")]
 enum Command {
     #[structopt(flatten)]
     Api(api::ApiCommand),
