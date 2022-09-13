@@ -59,7 +59,7 @@ impl Program {
 }
 
 #[derive(StructOpt)]
-#[structopt(about = "interact with local or network connected nodes")]
+#[structopt(about = "Work with Peridio from the command line.")]
 enum Command {
     #[structopt(flatten)]
     Api(api::ApiCommand),
