@@ -1,3 +1,4 @@
+mod deployments;
 mod firmwares;
 mod signing_keys;
 mod upgrade;
@@ -19,6 +20,7 @@ pub struct Command<T: StructOpt> {
 
 #[derive(StructOpt, Debug)]
 pub enum ApiCommand {
+    Deployments(deployments::DeploymentsCommand),
     Firmwares(firmwares::FirmwaresCommand),
     SigningKeys(signing_keys::SigningKeysCommand),
     #[structopt(flatten)]
@@ -29,6 +31,7 @@ pub enum ApiCommand {
 impl ApiCommand {
     pub(crate) async fn run(self) -> Result<(), crate::Error> {
         match self {
+            ApiCommand::Deployments(cmd) => cmd.run().await?,
             ApiCommand::Firmwares(cmd) => cmd.run().await?,
             ApiCommand::SigningKeys(cmd) => cmd.run().await?,
             ApiCommand::Users(cmd) => cmd.run().await?,
