@@ -2,7 +2,7 @@ use std::{
     cmp::min,
     env,
     fs::{create_dir_all, rename},
-    io::{Cursor, Seek, SeekFrom, Write},
+    io::{Cursor, ErrorKind, Seek, SeekFrom, Write},
     path::Path,
 };
 
@@ -82,7 +82,21 @@ impl DoUpgradeCommand {
         let current_cli_executable =
             env::current_exe().map_err(|_| "Can't retrieve the current cli directory")?;
 
-        rename(update_file, current_cli_executable).unwrap();
+        match rename(update_file, &current_cli_executable) {
+            Err(err) => {
+                if err.kind() == ErrorKind::PermissionDenied {
+                    return Err(format!(
+                        "CLI failed to upgrade: permission denied writing to {}",
+                        &current_cli_executable.display()
+                    ));
+                }
+                return Err(format!(
+                    "CLI failed to upgrade: unknown error writing to {}",
+                    &current_cli_executable.display()
+                ));
+            }
+            Ok(_) => {}
+        }
 
         println!("CLI upgraded successfully ({})", github_response.tag_name);
 
