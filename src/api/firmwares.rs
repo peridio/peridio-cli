@@ -30,7 +30,7 @@ impl FirmwaresCommand {
 #[derive(StructOpt, Debug)]
 pub struct CreateCommand {
     #[structopt(long)]
-    firmware: Option<String>,
+    firmware_path: String,
 
     #[structopt(long)]
     organization_name: String,
@@ -45,7 +45,7 @@ pub struct CreateCommand {
 impl Command<CreateCommand> {
     async fn run(self) -> Result<(), Error> {
         let params = CreateFirmwareParams {
-            firmware: self.inner.firmware,
+            firmware_path: self.inner.firmware_path,
             organization_name: self.inner.organization_name,
             product_name: self.inner.product_name,
             ttl: self.inner.ttl,
