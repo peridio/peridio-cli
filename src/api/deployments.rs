@@ -4,7 +4,7 @@ use peridio_sdk::api::deployments::{
     CreateDeploymentParams, DeleteDeploymentParams, GetDeploymentParams, ListDeploymentParams,
     UpdateDeploymentParams,
 };
-use peridio_sdk::api::{Api, DeploymentCondition, UpdateDeployment};
+use peridio_sdk::api::{Api, DeploymentCondition, UpdateDeployment, UpdateDeploymentCondition};
 use snafu::ResultExt;
 use structopt::StructOpt;
 use uuid::Uuid;
@@ -44,11 +44,11 @@ pub struct CreateCommand {
     #[structopt(long)]
     name: String,
 
-    #[structopt(long)]
+    #[structopt(long, required = true)]
     tags: Vec<String>,
 
     #[structopt(long)]
-    version: String,
+    version: Option<String>,
 }
 
 impl Command<CreateCommand> {
@@ -196,21 +196,21 @@ impl Command<UpdateCommand> {
     async fn run(self) -> Result<(), Error> {
         let firmware = self.inner.firmware.map(|uuid| uuid.to_string());
 
-        let mut condition = DeploymentCondition {
-            tags: Vec::new(),
-            version: "".to_string(),
+        let mut condition = UpdateDeploymentCondition {
+            tags: None,
+            version: None,
         };
 
         let deployment = UpdateDeployment {
             name: self.inner.name,
-            conditions: if self.inner.tags != None && self.inner.version != None {
-                let tags = self.inner.tags.unwrap();
-                let version = self.inner.version.unwrap();
+            conditions: if self.inner.tags != None || self.inner.version != None {
+                let tags = self.inner.tags;
+                let version = self.inner.version;
+
                 condition.tags = tags;
                 condition.version = version;
+
                 Some(&condition)
-            } else if self.inner.tags != None || self.inner.version != None {
-                panic!("Must provide both tags and version");
             } else {
                 None
             },
