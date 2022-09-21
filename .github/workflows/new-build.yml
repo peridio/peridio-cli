@@ -1,7 +1,7 @@
 name: Continuous integration
 
 on:
-  push:
+  pull_request:
     branches:
       - main
 
@@ -132,6 +132,7 @@ jobs:
           command: clippy
           args: "-- -D warnings"
   build:
+    if: github.event.pull_request.merged
     needs:
       - rustfmt
       - clippy

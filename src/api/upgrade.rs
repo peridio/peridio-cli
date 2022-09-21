@@ -82,20 +82,17 @@ impl DoUpgradeCommand {
         let current_cli_executable =
             env::current_exe().map_err(|_| "Can't retrieve the current cli directory")?;
 
-        match rename(update_file, &current_cli_executable) {
-            Err(err) => {
-                if err.kind() == ErrorKind::PermissionDenied {
-                    return Err(format!(
-                        "CLI failed to upgrade: permission denied writing to {}",
-                        &current_cli_executable.display()
-                    ));
-                }
+        if let Err(err) = rename(update_file, &current_cli_executable) {
+            if err.kind() == ErrorKind::PermissionDenied {
                 return Err(format!(
-                    "CLI failed to upgrade: unknown error writing to {}",
+                    "CLI failed to upgrade: permission denied writing to {}",
                     &current_cli_executable.display()
                 ));
             }
-            Ok(_) => {}
+            return Err(format!(
+                "CLI failed to upgrade: unknown error writing to {}",
+                &current_cli_executable.display()
+            ));
         }
 
         println!("CLI upgraded successfully ({})", github_response.tag_name);
