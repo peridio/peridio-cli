@@ -84,9 +84,8 @@ impl Command<DeleteCommand> {
 
         let api = Api::new(self.api_key, self.base_url);
 
-        match api.firmwares().delete(params).await.context(ApiSnafu)? {
-            Some(_) => panic!(),
-            None => (),
+        if (api.firmwares().delete(params).await.context(ApiSnafu)?).is_some() {
+            panic!()
         };
 
         Ok(())
