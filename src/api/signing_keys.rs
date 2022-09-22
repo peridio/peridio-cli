@@ -73,9 +73,8 @@ impl Command<DeleteCommand> {
 
         let api = Api::new(self.api_key, self.base_url);
 
-        match api.signing_keys().delete(params).await.context(ApiSnafu)? {
-            Some(_) => panic!(),
-            None => (),
+        if (api.signing_keys().delete(params).await.context(ApiSnafu)?).is_some() {
+            panic!()
         };
 
         Ok(())

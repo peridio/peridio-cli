@@ -98,9 +98,8 @@ impl Command<DeleteCommand> {
 
         let api = Api::new(self.api_key, self.base_url);
 
-        match api.deployments().delete(params).await.context(ApiSnafu)? {
-            Some(_) => panic!(),
-            None => (),
+        if (api.deployments().delete(params).await.context(ApiSnafu)?).is_some() {
+            panic!()
         };
 
         Ok(())
