@@ -4,6 +4,9 @@ on:
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - main
 
 jobs:
   check:
@@ -132,7 +135,7 @@ jobs:
           command: clippy
           args: "-- -D warnings"
   build:
-    if: github.event.pull_request.merged
+    if: github.event_name == "push"
     needs:
       - rustfmt
       - clippy

@@ -42,7 +42,10 @@ impl UpgradeCommand {
 }
 
 #[derive(StructOpt, Debug)]
-pub struct DoUpgradeCommand {}
+pub struct DoUpgradeCommand {
+    #[structopt(long)]
+    version: Option<String>,
+}
 
 impl DoUpgradeCommand {
     async fn run(self) -> Result<(), Error> {
@@ -51,7 +54,7 @@ impl DoUpgradeCommand {
 
             create_dir_all(cache_dir).unwrap();
 
-            if let Ok(resp) = Self::get_latest_release_info().await {
+            if let Ok(resp) = Self::get_release_info(self.version).await {
                 let current_version = env!("CARGO_PKG_VERSION");
                 let github_asset_info = resp.assets.first().unwrap();
 
@@ -156,11 +159,19 @@ impl DoUpgradeCommand {
         Ok(())
     }
 
-    async fn get_latest_release_info() -> Result<GithubResponse, reqwest::Error> {
-        let client = ClientBuilder::new().use_rustls_tls().build().unwrap();
+    async fn get_release_info(version: Option<String>) -> Result<GithubResponse, reqwest::Error> {
+        let client = ClientBuilder::new().use_rustls_tls().build()?;
+        let url = if let Some(version) = version {
+            format!(
+                "https://api.github.com/repos/peridio/morel/releases/tags/{}",
+                version
+            )
+        } else {
+            "https://api.github.com/repos/peridio/morel/releases/latest".to_owned()
+        };
 
         client
-            .get("https://api.github.com/repos/peridio/morel/releases/latest")
+            .get(url)
             .header("Accept", "application/vnd.github+json")
             .header("User-Agent", "peridio/morel")
             .send()
