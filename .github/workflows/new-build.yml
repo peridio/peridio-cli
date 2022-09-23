@@ -135,7 +135,7 @@ jobs:
           command: clippy
           args: "-- -D warnings"
   build:
-    if: github.event_name == "push"
+    if: github.event_name == 'push'
     needs:
       - rustfmt
       - clippy
