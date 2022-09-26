@@ -1,6 +1,8 @@
 mod deployments;
+mod device_certificates;
 mod devices;
 mod firmwares;
+mod products;
 mod signing_keys;
 mod upgrade;
 mod users;
@@ -23,7 +25,9 @@ pub struct Command<T: StructOpt> {
 pub enum ApiCommand {
     Deployments(deployments::DeploymentsCommand),
     Devices(devices::DevicesCommand),
+    DeviceCertificates(device_certificates::DeviceCertificatesCommand),
     Firmwares(firmwares::FirmwaresCommand),
+    Products(products::ProductsCommand),
     SigningKeys(signing_keys::SigningKeysCommand),
     #[structopt(flatten)]
     Upgrade(upgrade::UpgradeCommand),
@@ -35,7 +39,9 @@ impl ApiCommand {
         match self {
             ApiCommand::Deployments(cmd) => cmd.run().await?,
             ApiCommand::Devices(cmd) => cmd.run().await?,
+            ApiCommand::DeviceCertificates(cmd) => cmd.run().await?,
             ApiCommand::Firmwares(cmd) => cmd.run().await?,
+            ApiCommand::Products(cmd) => cmd.run().await?,
             ApiCommand::SigningKeys(cmd) => cmd.run().await?,
             ApiCommand::Users(cmd) => cmd.run().await?,
             ApiCommand::Upgrade(cmd) => cmd.run().await?,

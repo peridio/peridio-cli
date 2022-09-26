@@ -247,11 +247,12 @@ impl Command<AuthenticateCommand> {
         } else {
             self.inner.certificate.unwrap()
         };
+        let encoded_certificate = base64::encode(&certificate);
 
         let params = AuthenticateDeviceParams {
             organization_name: self.inner.organization_name,
             product_name: self.inner.product_name,
-            certificate,
+            certificate: encoded_certificate,
         };
 
         let api = Api::new(self.api_key, self.base_url);
