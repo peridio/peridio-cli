@@ -98,4 +98,4 @@ jobs:
           body_path: CHANGELOG.md
           generate_release_notes: false
           files: peridio-${{ github.ref_name }}_${{ matrix.target }}.tar.gz
-          prerelease: ${{ contains(fromJson('["-rc", "-beta", "-alpha"]'), github.ref) }}
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
