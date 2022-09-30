@@ -1,7 +1,7 @@
 use super::Command;
 use crate::{print_json, ApiSnafu, Error};
 use peridio_sdk::api::product_users::{
-    AddProductUserParams, DeleteProductUserParams, GetProductUserParams, ListProductUserParams,
+    AddProductUserParams, GetProductUserParams, ListProductUserParams, RemoveProductUserParams,
     UpdateProductUserParams,
 };
 use peridio_sdk::api::Api;
@@ -11,7 +11,7 @@ use structopt::StructOpt;
 #[derive(StructOpt, Debug)]
 pub enum ProductUsersCommand {
     Add(Command<AddCommand>),
-    Delete(Command<DeleteCommand>),
+    Remove(Command<RemoveCommand>),
     Get(Command<GetCommand>),
     List(Command<ListCommand>),
     Update(Command<UpdateCommand>),
@@ -21,7 +21,7 @@ impl ProductUsersCommand {
     pub async fn run(self) -> Result<(), Error> {
         match self {
             Self::Add(cmd) => cmd.run().await,
-            Self::Delete(cmd) => cmd.run().await,
+            Self::Remove(cmd) => cmd.run().await,
             Self::Get(cmd) => cmd.run().await,
             Self::List(cmd) => cmd.run().await,
             Self::Update(cmd) => cmd.run().await,
@@ -65,7 +65,7 @@ impl Command<AddCommand> {
 }
 
 #[derive(StructOpt, Debug)]
-pub struct DeleteCommand {
+pub struct RemoveCommand {
     #[structopt(long)]
     organization_name: String,
 
@@ -76,9 +76,9 @@ pub struct DeleteCommand {
     user_username: String,
 }
 
-impl Command<DeleteCommand> {
+impl Command<RemoveCommand> {
     async fn run(self) -> Result<(), Error> {
-        let params = DeleteProductUserParams {
+        let params = RemoveProductUserParams {
             organization_name: self.inner.organization_name,
             product_name: self.inner.product_name,
             user_username: self.inner.user_username,
@@ -86,7 +86,7 @@ impl Command<DeleteCommand> {
 
         let api = Api::new(self.api_key, self.base_url);
 
-        if (api.product_users().delete(params).await.context(ApiSnafu)?).is_some() {
+        if (api.product_users().remove(params).await.context(ApiSnafu)?).is_some() {
             panic!()
         };
 

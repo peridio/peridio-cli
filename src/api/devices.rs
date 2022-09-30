@@ -3,8 +3,8 @@ use std::fs;
 use super::Command;
 use crate::{print_json, ApiSnafu, Error};
 use peridio_sdk::api::devices::{
-    AuthenticateDeviceParams, CreateDevice, CreateDeviceParams, DeleteDeviceParams,
-    GetDeviceParams, ListDeviceParams, UpdateDeviceParams,
+    AuthenticateDeviceParams, CreateDeviceParams, DeleteDeviceParams, GetDeviceParams,
+    ListDeviceParams, UpdateDeviceParams,
 };
 use peridio_sdk::api::Api;
 use snafu::ResultExt;
@@ -36,16 +36,16 @@ impl DevicesCommand {
 #[derive(StructOpt, Debug)]
 pub struct CreateCommand {
     #[structopt(long)]
-    description: String,
+    description: Option<String>,
 
     #[structopt(long)]
-    healthy: bool,
+    healthy: Option<bool>,
 
     #[structopt(long)]
     identifier: String,
 
     #[structopt(long)]
-    last_communication: String,
+    last_communication: Option<String>,
 
     #[structopt(long)]
     organization_name: String,
@@ -54,7 +54,7 @@ pub struct CreateCommand {
     product_name: String,
 
     #[structopt(long, required = true)]
-    tags: Vec<String>,
+    tags: Option<Vec<String>>,
 }
 
 impl Command<CreateCommand> {
@@ -62,13 +62,11 @@ impl Command<CreateCommand> {
         let params = CreateDeviceParams {
             organization_name: self.inner.organization_name,
             product_name: self.inner.product_name,
-            data: CreateDevice {
-                description: self.inner.description,
-                healthy: self.inner.healthy,
-                identifier: self.inner.identifier,
-                last_communication: self.inner.last_communication,
-                tags: self.inner.tags,
-            },
+            description: self.inner.description,
+            healthy: self.inner.healthy,
+            identifier: self.inner.identifier,
+            last_communication: self.inner.last_communication,
+            tags: self.inner.tags,
         };
 
         let api = Api::new(self.api_key, self.base_url);
