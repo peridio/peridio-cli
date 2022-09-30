@@ -1,8 +1,8 @@
 use super::Command;
 use crate::{print_json, ApiSnafu, Error};
 use peridio_sdk::api::organization_users::{
-    CreateOrganizationUserParams, DeleteOrganizationUserParams, GetOrganizationUserParams,
-    ListOrganizationUserParams, UpdateOrganizationUserParams,
+    AddOrganizationUserParams, GetOrganizationUserParams, ListOrganizationUserParams,
+    RemoveOrganizationUserParams, UpdateOrganizationUserParams,
 };
 use peridio_sdk::api::Api;
 use snafu::ResultExt;
@@ -11,7 +11,7 @@ use structopt::StructOpt;
 #[derive(StructOpt, Debug)]
 pub enum OrganizationUsersCommand {
     Add(Command<AddCommand>),
-    Delete(Command<DeleteCommand>),
+    Remove(Command<RemoveCommand>),
     Get(Command<GetCommand>),
     List(Command<ListCommand>),
     Update(Command<UpdateCommand>),
@@ -21,7 +21,7 @@ impl OrganizationUsersCommand {
     pub async fn run(self) -> Result<(), Error> {
         match self {
             Self::Add(cmd) => cmd.run().await,
-            Self::Delete(cmd) => cmd.run().await,
+            Self::Remove(cmd) => cmd.run().await,
             Self::Get(cmd) => cmd.run().await,
             Self::List(cmd) => cmd.run().await,
             Self::Update(cmd) => cmd.run().await,
@@ -43,7 +43,7 @@ pub struct AddCommand {
 
 impl Command<AddCommand> {
     async fn run(self) -> Result<(), Error> {
-        let params = CreateOrganizationUserParams {
+        let params = AddOrganizationUserParams {
             organization_name: self.inner.organization_name,
             role: self.inner.role,
             username: self.inner.username,
@@ -53,7 +53,7 @@ impl Command<AddCommand> {
 
         match api
             .organization_users()
-            .create(params)
+            .add(params)
             .await
             .context(ApiSnafu)?
         {
@@ -66,7 +66,7 @@ impl Command<AddCommand> {
 }
 
 #[derive(StructOpt, Debug)]
-pub struct DeleteCommand {
+pub struct RemoveCommand {
     #[structopt(long)]
     organization_name: String,
 
@@ -74,9 +74,9 @@ pub struct DeleteCommand {
     user_username: String,
 }
 
-impl Command<DeleteCommand> {
+impl Command<RemoveCommand> {
     async fn run(self) -> Result<(), Error> {
-        let params = DeleteOrganizationUserParams {
+        let params = RemoveOrganizationUserParams {
             organization_name: self.inner.organization_name,
             user_username: self.inner.user_username,
         };
@@ -85,7 +85,7 @@ impl Command<DeleteCommand> {
 
         if (api
             .organization_users()
-            .delete(params)
+            .remove(params)
             .await
             .context(ApiSnafu)?)
         .is_some()
