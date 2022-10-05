@@ -43,7 +43,7 @@ pub struct CreateCommand {
     #[structopt(
         long,
         conflicts_with("certificate_path"),
-        required_unless_one(&["certificate_path"])
+        required_unless_one(&["certificate-path"])
     )]
     certificate: Option<String>,
 

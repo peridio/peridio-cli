@@ -53,7 +53,7 @@ pub struct CreateCommand {
     #[structopt(long)]
     product_name: String,
 
-    #[structopt(long, required = true)]
+    #[structopt(long)]
     tags: Option<Vec<String>>,
 }
 
