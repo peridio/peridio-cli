@@ -3,6 +3,10 @@ use crate::print_json;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
+use peridio_sdk::api::product_users::{
+    AddProductUserParams, GetProductUserParams, ListProductUserParams, RemoveProductUserParams,
+    UpdateProductUserParams,
+};
 use peridio_sdk::api::products::{
     CreateProductParams, DeleteProductParams, GetProductParams, ListProductParams,
     UpdateProductParams,
@@ -20,6 +24,11 @@ pub enum ProductsCommand {
     Get(Command<GetCommand>),
     List(Command<ListCommand>),
     Update(Command<UpdateCommand>),
+    AddUser(Command<AddUserCommand>),
+    RemoveUser(Command<RemoveUserCommand>),
+    GetUser(Command<GetUserCommand>),
+    ListUsers(Command<ListUsersCommand>),
+    UpdateUser(Command<UpdateUserCommand>),
 }
 
 impl ProductsCommand {
@@ -30,6 +39,11 @@ impl ProductsCommand {
             Self::Get(cmd) => cmd.run(global_options).await,
             Self::List(cmd) => cmd.run(global_options).await,
             Self::Update(cmd) => cmd.run(global_options).await,
+            Self::AddUser(cmd) => cmd.run(global_options).await,
+            Self::RemoveUser(cmd) => cmd.run(global_options).await,
+            Self::GetUser(cmd) => cmd.run(global_options).await,
+            Self::ListUsers(cmd) => cmd.run(global_options).await,
+            Self::UpdateUser(cmd) => cmd.run(global_options).await,
         }
     }
 }
@@ -186,6 +200,179 @@ impl Command<UpdateCommand> {
 
         match api.products().update(params).await.context(ApiSnafu)? {
             Some(product) => print_json!(&product),
+            None => panic!(),
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(StructOpt, Debug)]
+pub struct AddUserCommand {
+    #[structopt(long)]
+    organization_name: String,
+
+    #[structopt(long)]
+    product_name: String,
+
+    #[structopt(long)]
+    role: String,
+
+    #[structopt(long)]
+    username: String,
+}
+
+impl Command<AddUserCommand> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+        let params = AddProductUserParams {
+            organization_name: self.inner.organization_name,
+            product_name: self.inner.product_name,
+            role: self.inner.role,
+            username: self.inner.username,
+        };
+
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key,
+            endpoint: global_options.base_url,
+        });
+
+        match api.product_users().add(params).await.context(ApiSnafu)? {
+            Some(device) => print_json!(&device),
+            None => panic!(),
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(StructOpt, Debug)]
+pub struct RemoveUserCommand {
+    #[structopt(long)]
+    organization_name: String,
+
+    #[structopt(long)]
+    product_name: String,
+
+    #[structopt(long)]
+    user_username: String,
+}
+
+impl Command<RemoveUserCommand> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+        let params = RemoveProductUserParams {
+            organization_name: self.inner.organization_name,
+            product_name: self.inner.product_name,
+            user_username: self.inner.user_username,
+        };
+
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key,
+            endpoint: global_options.base_url,
+        });
+
+        if (api.product_users().remove(params).await.context(ApiSnafu)?).is_some() {
+            panic!()
+        };
+
+        Ok(())
+    }
+}
+
+#[derive(StructOpt, Debug)]
+pub struct GetUserCommand {
+    #[structopt(long)]
+    organization_name: String,
+
+    #[structopt(long)]
+    product_name: String,
+
+    #[structopt(long)]
+    user_username: String,
+}
+
+impl Command<GetUserCommand> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+        let params = GetProductUserParams {
+            organization_name: self.inner.organization_name,
+            product_name: self.inner.product_name,
+            user_username: self.inner.user_username,
+        };
+
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key,
+            endpoint: global_options.base_url,
+        });
+
+        match api.product_users().get(params).await.context(ApiSnafu)? {
+            Some(device) => print_json!(&device),
+            None => panic!(),
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(StructOpt, Debug)]
+pub struct ListUsersCommand {
+    #[structopt(long)]
+    organization_name: String,
+
+    #[structopt(long)]
+    product_name: String,
+}
+
+impl Command<ListUsersCommand> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+        let params = ListProductUserParams {
+            organization_name: self.inner.organization_name,
+            product_name: self.inner.product_name,
+        };
+
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key,
+            endpoint: global_options.base_url,
+        });
+
+        match api.product_users().list(params).await.context(ApiSnafu)? {
+            Some(devices) => print_json!(&devices),
+            None => panic!(),
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(StructOpt, Debug)]
+pub struct UpdateUserCommand {
+    #[structopt(long)]
+    organization_name: String,
+
+    #[structopt(long)]
+    product_name: String,
+
+    #[structopt(long)]
+    role: String,
+
+    #[structopt(long)]
+    user_username: String,
+}
+
+impl Command<UpdateUserCommand> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+        let params = UpdateProductUserParams {
+            organization_name: self.inner.organization_name,
+            product_name: self.inner.product_name,
+            role: self.inner.role,
+            user_username: self.inner.user_username,
+        };
+
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key,
+            endpoint: global_options.base_url,
+        });
+
+        match api.product_users().update(params).await.context(ApiSnafu)? {
+            Some(device) => print_json!(&device),
             None => panic!(),
         }
 
