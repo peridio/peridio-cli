@@ -1,12 +1,16 @@
 use std::fs;
 
 use super::Command;
-use crate::{print_json, ApiSnafu, Error};
+use crate::print_json;
+use crate::ApiSnafu;
+use crate::Error;
+use crate::GlobalOptions;
 use peridio_sdk::api::devices::{
     AuthenticateDeviceParams, CreateDeviceParams, DeleteDeviceParams, GetDeviceParams,
     ListDeviceParams, UpdateDeviceParams,
 };
 use peridio_sdk::api::Api;
+use peridio_sdk::api::ApiOptions;
 use snafu::ResultExt;
 use structopt::StructOpt;
 
@@ -21,14 +25,14 @@ pub enum DevicesCommand {
 }
 
 impl DevicesCommand {
-    pub async fn run(self) -> Result<(), Error> {
+    pub async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         match self {
-            Self::Authenticate(cmd) => cmd.run().await,
-            Self::Create(cmd) => cmd.run().await,
-            Self::Delete(cmd) => cmd.run().await,
-            Self::Get(cmd) => cmd.run().await,
-            Self::List(cmd) => cmd.run().await,
-            Self::Update(cmd) => cmd.run().await,
+            Self::Authenticate(cmd) => cmd.run(global_options).await,
+            Self::Create(cmd) => cmd.run(global_options).await,
+            Self::Delete(cmd) => cmd.run(global_options).await,
+            Self::Get(cmd) => cmd.run(global_options).await,
+            Self::List(cmd) => cmd.run(global_options).await,
+            Self::Update(cmd) => cmd.run(global_options).await,
         }
     }
 }
@@ -58,7 +62,7 @@ pub struct CreateCommand {
 }
 
 impl Command<CreateCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = CreateDeviceParams {
             organization_name: self.inner.organization_name,
             product_name: self.inner.product_name,
@@ -69,7 +73,10 @@ impl Command<CreateCommand> {
             tags: self.inner.tags,
         };
 
-        let api = Api::new(self.api_key, self.base_url);
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key,
+            endpoint: global_options.base_url,
+        });
 
         match api.devices().create(params).await.context(ApiSnafu)? {
             Some(device) => print_json!(&device),
@@ -93,14 +100,17 @@ pub struct DeleteCommand {
 }
 
 impl Command<DeleteCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = DeleteDeviceParams {
             device_identifier: self.inner.device_identifier,
             organization_name: self.inner.organization_name,
             product_name: self.inner.product_name,
         };
 
-        let api = Api::new(self.api_key, self.base_url);
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key,
+            endpoint: global_options.base_url,
+        });
 
         if (api.devices().delete(params).await.context(ApiSnafu)?).is_some() {
             panic!()
@@ -123,14 +133,17 @@ pub struct GetCommand {
 }
 
 impl Command<GetCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = GetDeviceParams {
             device_identifier: self.inner.device_identifier,
             organization_name: self.inner.organization_name,
             product_name: self.inner.product_name,
         };
 
-        let api = Api::new(self.api_key, self.base_url);
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key,
+            endpoint: global_options.base_url,
+        });
 
         match api.devices().get(params).await.context(ApiSnafu)? {
             Some(device) => print_json!(&device),
@@ -151,13 +164,16 @@ pub struct ListCommand {
 }
 
 impl Command<ListCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListDeviceParams {
             organization_name: self.inner.organization_name,
             product_name: self.inner.product_name,
         };
 
-        let api = Api::new(self.api_key, self.base_url);
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key,
+            endpoint: global_options.base_url,
+        });
 
         match api.devices().list(params).await.context(ApiSnafu)? {
             Some(devices) => print_json!(&devices),
@@ -193,7 +209,7 @@ pub struct UpdateCommand {
 }
 
 impl Command<UpdateCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = UpdateDeviceParams {
             device_identifier: self.inner.device_identifier,
             organization_name: self.inner.organization_name,
@@ -204,7 +220,10 @@ impl Command<UpdateCommand> {
             product_name: self.inner.product_name,
         };
 
-        let api = Api::new(self.api_key, self.base_url);
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key,
+            endpoint: global_options.base_url,
+        });
 
         match api.devices().update(params).await.context(ApiSnafu)? {
             Some(device) => print_json!(&device),
@@ -239,7 +258,7 @@ pub struct AuthenticateCommand {
 }
 
 impl Command<AuthenticateCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let certificate = if let Some(cert_path) = self.inner.certificate_path {
             fs::read_to_string(cert_path).unwrap()
         } else {
@@ -253,7 +272,10 @@ impl Command<AuthenticateCommand> {
             certificate: encoded_certificate,
         };
 
-        let api = Api::new(self.api_key, self.base_url);
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key,
+            endpoint: global_options.base_url,
+        });
 
         match api.devices().authenticate(params).await.context(ApiSnafu)? {
             Some(device) => print_json!(&device),

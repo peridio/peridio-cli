@@ -1,12 +1,16 @@
 use std::fs;
 
 use super::Command;
-use crate::{print_json, ApiSnafu, Error};
+use crate::print_json;
+use crate::ApiSnafu;
+use crate::Error;
+use crate::GlobalOptions;
 use peridio_sdk::api::device_certificates::{
     CreateDeviceCertificateParams, DeleteDeviceCertificateParams, GetDeviceCertificateParams,
     ListDeviceCertificateParams,
 };
 use peridio_sdk::api::Api;
+use peridio_sdk::api::ApiOptions;
 use snafu::ResultExt;
 use structopt::StructOpt;
 
@@ -19,12 +23,12 @@ pub enum DeviceCertificatesCommand {
 }
 
 impl DeviceCertificatesCommand {
-    pub async fn run(self) -> Result<(), Error> {
+    pub async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         match self {
-            Self::Create(cmd) => cmd.run().await,
-            Self::Delete(cmd) => cmd.run().await,
-            Self::Get(cmd) => cmd.run().await,
-            Self::List(cmd) => cmd.run().await,
+            Self::Create(cmd) => cmd.run(global_options).await,
+            Self::Delete(cmd) => cmd.run(global_options).await,
+            Self::Get(cmd) => cmd.run(global_options).await,
+            Self::List(cmd) => cmd.run(global_options).await,
         }
     }
 }
@@ -56,7 +60,7 @@ pub struct CreateCommand {
 }
 
 impl Command<CreateCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let certificate = if let Some(cert_path) = self.inner.certificate_path {
             fs::read_to_string(cert_path).unwrap()
         } else {
@@ -72,7 +76,10 @@ impl Command<CreateCommand> {
             cert: encoded_certificate,
         };
 
-        let api = Api::new(self.api_key, self.base_url);
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key,
+            endpoint: global_options.base_url,
+        });
 
         match api
             .device_certificates()
@@ -104,7 +111,7 @@ pub struct DeleteCommand {
 }
 
 impl Command<DeleteCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = DeleteDeviceCertificateParams {
             device_identifier: self.inner.device_identifier,
             organization_name: self.inner.organization_name,
@@ -112,7 +119,10 @@ impl Command<DeleteCommand> {
             certificate_serial: self.inner.certificate_serial,
         };
 
-        let api = Api::new(self.api_key, self.base_url);
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key,
+            endpoint: global_options.base_url,
+        });
 
         if (api
             .device_certificates()
@@ -144,7 +154,7 @@ pub struct GetCommand {
 }
 
 impl Command<GetCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = GetDeviceCertificateParams {
             device_identifier: self.inner.device_identifier,
             organization_name: self.inner.organization_name,
@@ -152,7 +162,10 @@ impl Command<GetCommand> {
             certificate_serial: self.inner.certificate_serial,
         };
 
-        let api = Api::new(self.api_key, self.base_url);
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key,
+            endpoint: global_options.base_url,
+        });
 
         match api
             .device_certificates()
@@ -181,14 +194,17 @@ pub struct ListCommand {
 }
 
 impl Command<ListCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListDeviceCertificateParams {
             organization_name: self.inner.organization_name,
             product_name: self.inner.product_name,
             device_identifier: self.inner.device_identifier,
         };
 
-        let api = Api::new(self.api_key, self.base_url);
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key,
+            endpoint: global_options.base_url,
+        });
 
         match api
             .device_certificates()

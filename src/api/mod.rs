@@ -9,16 +9,11 @@ mod signing_keys;
 mod upgrade;
 mod users;
 
+use crate::GlobalOptions;
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
 pub struct Command<T: StructOpt> {
-    #[structopt(long, env = "PERIDIO_API_KEY")]
-    pub api_key: String,
-
-    #[structopt(long, env = "PERIDIO_BASE_URL")]
-    pub base_url: Option<String>,
-
     #[structopt(flatten)]
     inner: T,
 }
@@ -39,17 +34,17 @@ pub enum ApiCommand {
 }
 
 impl ApiCommand {
-    pub(crate) async fn run(self) -> Result<(), crate::Error> {
+    pub(crate) async fn run(self, global_options: GlobalOptions) -> Result<(), crate::Error> {
         match self {
-            ApiCommand::Deployments(cmd) => cmd.run().await?,
-            ApiCommand::Devices(cmd) => cmd.run().await?,
-            ApiCommand::DeviceCertificates(cmd) => cmd.run().await?,
-            ApiCommand::Firmwares(cmd) => cmd.run().await?,
-            ApiCommand::OrganizationUsers(cmd) => cmd.run().await?,
-            ApiCommand::Products(cmd) => cmd.run().await?,
-            ApiCommand::ProductUsers(cmd) => cmd.run().await?,
-            ApiCommand::SigningKeys(cmd) => cmd.run().await?,
-            ApiCommand::Users(cmd) => cmd.run().await?,
+            ApiCommand::Deployments(cmd) => cmd.run(global_options).await?,
+            ApiCommand::Devices(cmd) => cmd.run(global_options).await?,
+            ApiCommand::DeviceCertificates(cmd) => cmd.run(global_options).await?,
+            ApiCommand::Firmwares(cmd) => cmd.run(global_options).await?,
+            ApiCommand::OrganizationUsers(cmd) => cmd.run(global_options).await?,
+            ApiCommand::Products(cmd) => cmd.run(global_options).await?,
+            ApiCommand::ProductUsers(cmd) => cmd.run(global_options).await?,
+            ApiCommand::SigningKeys(cmd) => cmd.run(global_options).await?,
+            ApiCommand::Users(cmd) => cmd.run(global_options).await?,
             ApiCommand::Upgrade(cmd) => cmd.run().await?,
         };
 

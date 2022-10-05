@@ -44,14 +44,26 @@ impl fmt::Debug for Error {
 #[derive(StructOpt)]
 #[structopt(name = "peridio", version = env!("MOREL_VERSION"))]
 struct Program {
+    #[structopt(flatten)]
+    global_options: GlobalOptions,
+
     #[structopt(subcommand)]
     command: Command,
+}
+
+#[derive(StructOpt)]
+pub struct GlobalOptions {
+    #[structopt(long, env = "PERIDIO_API_KEY", hide_env_values = true)]
+    api_key: String,
+
+    #[structopt(long, env = "PERIDIO_BASE_URL")]
+    base_url: Option<String>,
 }
 
 impl Program {
     async fn run(self) -> Result<(), Error> {
         match self.command {
-            Command::Api(cmd) => cmd.run().await?,
+            Command::Api(cmd) => cmd.run(self.global_options).await?,
         };
 
         Ok(())
