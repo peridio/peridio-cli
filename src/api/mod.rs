@@ -2,8 +2,7 @@ mod deployments;
 mod device_certificates;
 mod devices;
 mod firmwares;
-mod organization_users;
-mod product_users;
+mod organization;
 mod products;
 mod signing_keys;
 mod upgrade;
@@ -24,9 +23,8 @@ pub enum ApiCommand {
     Devices(devices::DevicesCommand),
     DeviceCertificates(device_certificates::DeviceCertificatesCommand),
     Firmwares(firmwares::FirmwaresCommand),
-    OrganizationUsers(organization_users::OrganizationUsersCommand),
+    Organizations(organization::OrganizationCommand),
     Products(products::ProductsCommand),
-    ProductUsers(product_users::ProductUsersCommand),
     SigningKeys(signing_keys::SigningKeysCommand),
     #[structopt(flatten)]
     Upgrade(upgrade::UpgradeCommand),
@@ -40,9 +38,8 @@ impl ApiCommand {
             ApiCommand::Devices(cmd) => cmd.run(global_options).await?,
             ApiCommand::DeviceCertificates(cmd) => cmd.run(global_options).await?,
             ApiCommand::Firmwares(cmd) => cmd.run(global_options).await?,
-            ApiCommand::OrganizationUsers(cmd) => cmd.run(global_options).await?,
+            ApiCommand::Organizations(cmd) => cmd.run(global_options).await?,
             ApiCommand::Products(cmd) => cmd.run(global_options).await?,
-            ApiCommand::ProductUsers(cmd) => cmd.run(global_options).await?,
             ApiCommand::SigningKeys(cmd) => cmd.run(global_options).await?,
             ApiCommand::Users(cmd) => cmd.run(global_options).await?,
             ApiCommand::Upgrade(cmd) => cmd.run().await?,

@@ -3,9 +3,9 @@ use crate::print_json;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
-use peridio_sdk::api::product_users::{
-    AddProductUserParams, GetProductUserParams, ListProductUserParams, RemoveProductUserParams,
-    UpdateProductUserParams,
+use peridio_sdk::api::organization_users::{
+    AddOrganizationUserParams, GetOrganizationUserParams, ListOrganizationUserParams,
+    RemoveOrganizationUserParams, UpdateOrganizationUserParams,
 };
 use peridio_sdk::api::Api;
 use peridio_sdk::api::ApiOptions;
@@ -13,33 +13,30 @@ use snafu::ResultExt;
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
-pub enum ProductUsersCommand {
-    Add(Command<AddCommand>),
-    Remove(Command<RemoveCommand>),
-    Get(Command<GetCommand>),
-    List(Command<ListCommand>),
-    Update(Command<UpdateCommand>),
+pub enum OrganizationCommand {
+    AddUser(Command<AddUserCommand>),
+    RemoveUser(Command<RemoveUserCommand>),
+    GetUser(Command<GetUserCommand>),
+    ListUsers(Command<ListUsersCommand>),
+    UpdateUser(Command<UpdateUserCommand>),
 }
 
-impl ProductUsersCommand {
+impl OrganizationCommand {
     pub async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         match self {
-            Self::Add(cmd) => cmd.run(global_options).await,
-            Self::Remove(cmd) => cmd.run(global_options).await,
-            Self::Get(cmd) => cmd.run(global_options).await,
-            Self::List(cmd) => cmd.run(global_options).await,
-            Self::Update(cmd) => cmd.run(global_options).await,
+            Self::AddUser(cmd) => cmd.run(global_options).await,
+            Self::RemoveUser(cmd) => cmd.run(global_options).await,
+            Self::GetUser(cmd) => cmd.run(global_options).await,
+            Self::ListUsers(cmd) => cmd.run(global_options).await,
+            Self::UpdateUser(cmd) => cmd.run(global_options).await,
         }
     }
 }
 
 #[derive(StructOpt, Debug)]
-pub struct AddCommand {
+pub struct AddUserCommand {
     #[structopt(long)]
     organization_name: String,
-
-    #[structopt(long)]
-    product_name: String,
 
     #[structopt(long)]
     role: String,
@@ -48,11 +45,10 @@ pub struct AddCommand {
     username: String,
 }
 
-impl Command<AddCommand> {
+impl Command<AddUserCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
-        let params = AddProductUserParams {
+        let params = AddOrganizationUserParams {
             organization_name: self.inner.organization_name,
-            product_name: self.inner.product_name,
             role: self.inner.role,
             username: self.inner.username,
         };
@@ -62,7 +58,12 @@ impl Command<AddCommand> {
             endpoint: global_options.base_url,
         });
 
-        match api.product_users().add(params).await.context(ApiSnafu)? {
+        match api
+            .organization_users()
+            .add(params)
+            .await
+            .context(ApiSnafu)?
+        {
             Some(device) => print_json!(&device),
             None => panic!(),
         }
@@ -72,22 +73,18 @@ impl Command<AddCommand> {
 }
 
 #[derive(StructOpt, Debug)]
-pub struct RemoveCommand {
+pub struct RemoveUserCommand {
     #[structopt(long)]
     organization_name: String,
-
-    #[structopt(long)]
-    product_name: String,
 
     #[structopt(long)]
     user_username: String,
 }
 
-impl Command<RemoveCommand> {
+impl Command<RemoveUserCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
-        let params = RemoveProductUserParams {
+        let params = RemoveOrganizationUserParams {
             organization_name: self.inner.organization_name,
-            product_name: self.inner.product_name,
             user_username: self.inner.user_username,
         };
 
@@ -96,7 +93,13 @@ impl Command<RemoveCommand> {
             endpoint: global_options.base_url,
         });
 
-        if (api.product_users().remove(params).await.context(ApiSnafu)?).is_some() {
+        if (api
+            .organization_users()
+            .remove(params)
+            .await
+            .context(ApiSnafu)?)
+        .is_some()
+        {
             panic!()
         };
 
@@ -105,22 +108,18 @@ impl Command<RemoveCommand> {
 }
 
 #[derive(StructOpt, Debug)]
-pub struct GetCommand {
+pub struct GetUserCommand {
     #[structopt(long)]
     organization_name: String,
-
-    #[structopt(long)]
-    product_name: String,
 
     #[structopt(long)]
     user_username: String,
 }
 
-impl Command<GetCommand> {
+impl Command<GetUserCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
-        let params = GetProductUserParams {
+        let params = GetOrganizationUserParams {
             organization_name: self.inner.organization_name,
-            product_name: self.inner.product_name,
             user_username: self.inner.user_username,
         };
 
@@ -129,7 +128,12 @@ impl Command<GetCommand> {
             endpoint: global_options.base_url,
         });
 
-        match api.product_users().get(params).await.context(ApiSnafu)? {
+        match api
+            .organization_users()
+            .get(params)
+            .await
+            .context(ApiSnafu)?
+        {
             Some(device) => print_json!(&device),
             None => panic!(),
         }
@@ -139,19 +143,15 @@ impl Command<GetCommand> {
 }
 
 #[derive(StructOpt, Debug)]
-pub struct ListCommand {
+pub struct ListUsersCommand {
     #[structopt(long)]
     organization_name: String,
-
-    #[structopt(long)]
-    product_name: String,
 }
 
-impl Command<ListCommand> {
+impl Command<ListUsersCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
-        let params = ListProductUserParams {
+        let params = ListOrganizationUserParams {
             organization_name: self.inner.organization_name,
-            product_name: self.inner.product_name,
         };
 
         let api = Api::new(ApiOptions {
@@ -159,7 +159,12 @@ impl Command<ListCommand> {
             endpoint: global_options.base_url,
         });
 
-        match api.product_users().list(params).await.context(ApiSnafu)? {
+        match api
+            .organization_users()
+            .list(params)
+            .await
+            .context(ApiSnafu)?
+        {
             Some(devices) => print_json!(&devices),
             None => panic!(),
         }
@@ -169,12 +174,9 @@ impl Command<ListCommand> {
 }
 
 #[derive(StructOpt, Debug)]
-pub struct UpdateCommand {
+pub struct UpdateUserCommand {
     #[structopt(long)]
     organization_name: String,
-
-    #[structopt(long)]
-    product_name: String,
 
     #[structopt(long)]
     role: String,
@@ -183,11 +185,10 @@ pub struct UpdateCommand {
     user_username: String,
 }
 
-impl Command<UpdateCommand> {
+impl Command<UpdateUserCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
-        let params = UpdateProductUserParams {
+        let params = UpdateOrganizationUserParams {
             organization_name: self.inner.organization_name,
-            product_name: self.inner.product_name,
             role: self.inner.role,
             user_username: self.inner.user_username,
         };
@@ -197,7 +198,12 @@ impl Command<UpdateCommand> {
             endpoint: global_options.base_url,
         });
 
-        match api.product_users().update(params).await.context(ApiSnafu)? {
+        match api
+            .organization_users()
+            .update(params)
+            .await
+            .context(ApiSnafu)?
+        {
             Some(device) => print_json!(&device),
             None => panic!(),
         }
