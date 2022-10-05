@@ -1,10 +1,18 @@
 use super::Command;
-use crate::{print_json, ApiSnafu, Error};
-use peridio_sdk::api::deployments::{
-    CreateDeploymentParams, DeleteDeploymentParams, GetDeploymentParams, ListDeploymentParams,
-    UpdateDeploymentParams,
-};
-use peridio_sdk::api::{Api, DeploymentCondition, UpdateDeployment, UpdateDeploymentCondition};
+use crate::print_json;
+use crate::ApiSnafu;
+use crate::Error;
+use crate::GlobalOptions;
+use peridio_sdk::api::deployments::CreateDeploymentParams;
+use peridio_sdk::api::deployments::DeleteDeploymentParams;
+use peridio_sdk::api::deployments::GetDeploymentParams;
+use peridio_sdk::api::deployments::ListDeploymentParams;
+use peridio_sdk::api::deployments::UpdateDeploymentParams;
+use peridio_sdk::api::Api;
+use peridio_sdk::api::ApiOptions;
+use peridio_sdk::api::DeploymentCondition;
+use peridio_sdk::api::UpdateDeployment;
+use peridio_sdk::api::UpdateDeploymentCondition;
 use snafu::ResultExt;
 use structopt::StructOpt;
 use uuid::Uuid;
@@ -19,13 +27,13 @@ pub enum DeploymentsCommand {
 }
 
 impl DeploymentsCommand {
-    pub async fn run(self) -> Result<(), Error> {
+    pub async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         match self {
-            Self::Create(cmd) => cmd.run().await,
-            Self::Delete(cmd) => cmd.run().await,
-            Self::Get(cmd) => cmd.run().await,
-            Self::List(cmd) => cmd.run().await,
-            Self::Update(cmd) => cmd.run().await,
+            Self::Create(cmd) => cmd.run(global_options).await,
+            Self::Delete(cmd) => cmd.run(global_options).await,
+            Self::Get(cmd) => cmd.run(global_options).await,
+            Self::List(cmd) => cmd.run(global_options).await,
+            Self::Update(cmd) => cmd.run(global_options).await,
         }
     }
 }
@@ -52,7 +60,7 @@ pub struct CreateCommand {
 }
 
 impl Command<CreateCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = CreateDeploymentParams {
             firmware: self.inner.firmware.to_string(),
             organization_name: self.inner.organization_name,
@@ -65,7 +73,10 @@ impl Command<CreateCommand> {
             },
         };
 
-        let api = Api::new(self.api_key, self.base_url);
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key,
+            endpoint: global_options.base_url,
+        });
 
         match api.deployments().create(params).await.context(ApiSnafu)? {
             Some(deployment) => print_json!(&deployment),
@@ -89,14 +100,17 @@ pub struct DeleteCommand {
 }
 
 impl Command<DeleteCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = DeleteDeploymentParams {
             deployment_name: self.inner.deployment_name,
             organization_name: self.inner.organization_name,
             product_name: self.inner.product_name,
         };
 
-        let api = Api::new(self.api_key, self.base_url);
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key,
+            endpoint: global_options.base_url,
+        });
 
         if (api.deployments().delete(params).await.context(ApiSnafu)?).is_some() {
             panic!()
@@ -119,14 +133,17 @@ pub struct GetCommand {
 }
 
 impl Command<GetCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = GetDeploymentParams {
             deployment_name: self.inner.deployment_name,
             organization_name: self.inner.organization_name,
             product_name: self.inner.product_name,
         };
 
-        let api = Api::new(self.api_key, self.base_url);
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key,
+            endpoint: global_options.base_url,
+        });
 
         match api.deployments().get(params).await.context(ApiSnafu)? {
             Some(deployment) => print_json!(&deployment),
@@ -147,13 +164,16 @@ pub struct ListCommand {
 }
 
 impl Command<ListCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListDeploymentParams {
             organization_name: self.inner.organization_name,
             product_name: self.inner.product_name,
         };
 
-        let api = Api::new(self.api_key, self.base_url);
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key,
+            endpoint: global_options.base_url,
+        });
 
         match api.deployments().list(params).await.context(ApiSnafu)? {
             Some(deployments) => print_json!(&deployments),
@@ -192,7 +212,7 @@ pub struct UpdateCommand {
 }
 
 impl Command<UpdateCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let firmware = self.inner.firmware.map(|uuid| uuid.to_string());
 
         let mut condition = UpdateDeploymentCondition {
@@ -224,7 +244,10 @@ impl Command<UpdateCommand> {
             deployment,
         };
 
-        let api = Api::new(self.api_key, self.base_url);
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key,
+            endpoint: global_options.base_url,
+        });
 
         match api.deployments().update(params).await.context(ApiSnafu)? {
             Some(deployment) => print_json!(&deployment),
