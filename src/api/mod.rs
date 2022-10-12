@@ -1,3 +1,4 @@
+mod ca_certificates;
 mod deployments;
 mod device_certificates;
 mod devices;
@@ -19,6 +20,7 @@ pub struct Command<T: StructOpt> {
 
 #[derive(StructOpt, Debug)]
 pub enum ApiCommand {
+    CaCertificates(ca_certificates::CaCertificatesCommand),
     Deployments(deployments::DeploymentsCommand),
     Devices(devices::DevicesCommand),
     DeviceCertificates(device_certificates::DeviceCertificatesCommand),
@@ -34,6 +36,7 @@ pub enum ApiCommand {
 impl ApiCommand {
     pub(crate) async fn run(self, global_options: GlobalOptions) -> Result<(), crate::Error> {
         match self {
+            ApiCommand::CaCertificates(cmd) => cmd.run(global_options).await?,
             ApiCommand::Deployments(cmd) => cmd.run(global_options).await?,
             ApiCommand::Devices(cmd) => cmd.run(global_options).await?,
             ApiCommand::DeviceCertificates(cmd) => cmd.run(global_options).await?,
