@@ -8,30 +8,25 @@ mod products;
 mod signing_keys;
 mod upgrade;
 mod users;
-
-use std::path::PathBuf;
-
 use clap::Parser;
+
+use crate::GlobalOptions;
 
 #[derive(Parser, Debug)]
 pub struct Command<T>
 where
     T: Parser + clap::Args,
 {
-    #[arg(from_global)]
-    api_key: String,
-
-    #[arg(from_global)]
-    base_url: Option<String>,
-
-    #[arg(from_global)]
-    ca_path: Option<PathBuf>,
-
-    #[arg(from_global)]
-    organization_name: String,
-
     #[command(flatten)]
     inner: T,
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum CliCommands {
+    #[command(flatten)]
+    ApiCommand(ApiCommand),
+    #[command()]
+    Upgrade(upgrade::UpgradeCommand),
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -52,25 +47,80 @@ pub enum ApiCommand {
     Products(products::ProductsCommand),
     #[command(subcommand)]
     SigningKeys(signing_keys::SigningKeysCommand),
-    #[command(args_conflicts_with_subcommands = true, subcommand_negates_reqs = true)]
-    Upgrade(upgrade::UpgradeCommand),
     #[command(subcommand)]
     Users(users::UsersCommand),
 }
 
-impl ApiCommand {
-    pub(crate) async fn run(self) -> Result<(), crate::Error> {
+impl CliCommands {
+    pub(crate) async fn run(self, global_options: GlobalOptions) -> Result<(), crate::Error> {
         match self {
-            ApiCommand::CaCertificates(cmd) => cmd.run().await?,
-            ApiCommand::Deployments(cmd) => cmd.run().await?,
-            ApiCommand::Devices(cmd) => cmd.run().await?,
-            ApiCommand::DeviceCertificates(cmd) => cmd.run().await?,
-            ApiCommand::Firmwares(cmd) => cmd.run().await?,
-            ApiCommand::Organizations(cmd) => cmd.run().await?,
-            ApiCommand::Products(cmd) => cmd.run().await?,
-            ApiCommand::SigningKeys(cmd) => cmd.run().await?,
-            ApiCommand::Users(cmd) => cmd.run().await?,
-            ApiCommand::Upgrade(cmd) => cmd.run().await?,
+            CliCommands::ApiCommand(api) => {
+                // require api key
+                let mut error_vec = Vec::new();
+
+                if global_options.api_key.is_none() {
+                    error_vec.push("--api-key".to_owned());
+                }
+
+                // require organization name
+                if global_options.organization_name.is_none() {
+                    error_vec.push("--organization-name".to_owned());
+                }
+
+                if !error_vec.is_empty() {
+                    use std::io::Write;
+                    use termcolor::WriteColor;
+
+                    let bufwtr = termcolor::BufferWriter::stderr(termcolor::ColorChoice::Always);
+                    let mut buffer = bufwtr.buffer();
+
+                    buffer
+                        .set_color(
+                            termcolor::ColorSpec::new()
+                                .set_fg(Some(termcolor::Color::Red))
+                                .set_bold(true),
+                        )
+                        .unwrap();
+
+                    write!(&mut buffer, "error: ").unwrap();
+
+                    buffer.set_color(&termcolor::ColorSpec::new()).unwrap();
+
+                    writeln!(
+                        &mut buffer,
+                        "The following arguments are required at the global level:"
+                    )
+                    .unwrap();
+
+                    buffer
+                        .set_color(
+                            termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::Green)),
+                        )
+                        .unwrap();
+
+                    for error in error_vec.iter() {
+                        writeln!(&mut buffer, "\t{}", error).unwrap();
+                    }
+
+                    bufwtr.print(&buffer).unwrap();
+
+                    // DATAERR
+                    std::process::exit(65);
+                }
+
+                match api {
+                    ApiCommand::CaCertificates(cmd) => cmd.run(global_options).await?,
+                    ApiCommand::Deployments(cmd) => cmd.run(global_options).await?,
+                    ApiCommand::Devices(cmd) => cmd.run(global_options).await?,
+                    ApiCommand::DeviceCertificates(cmd) => cmd.run(global_options).await?,
+                    ApiCommand::Firmwares(cmd) => cmd.run(global_options).await?,
+                    ApiCommand::Organizations(cmd) => cmd.run(global_options).await?,
+                    ApiCommand::Products(cmd) => cmd.run(global_options).await?,
+                    ApiCommand::SigningKeys(cmd) => cmd.run(global_options).await?,
+                    ApiCommand::Users(cmd) => cmd.run(global_options).await?,
+                }
+            }
+            CliCommands::Upgrade(cmd) => cmd.run().await?,
         };
 
         Ok(())

@@ -1,4 +1,5 @@
 mod api;
+mod config;
 
 use std::{
     fmt,
@@ -7,6 +8,7 @@ use std::{
 };
 
 use clap::Parser;
+use config::Config;
 use snafu::Snafu;
 
 #[macro_export]
@@ -63,32 +65,70 @@ struct Program {
 
 #[derive(Parser)]
 pub struct GlobalOptions {
-    #[arg(long, env = "PERIDIO_API_KEY", hide_env_values = true, global = true)]
+    #[arg(long, env = "PERIDIO_API_KEY", hide_env_values = true)]
     api_key: Option<String>,
 
-    #[arg(long, env = "PERIDIO_BASE_URL", global = true)]
+    #[arg(long, env = "PERIDIO_BASE_URL")]
     base_url: Option<String>,
 
-    #[arg(long, env = "PERIDIO_CA_PATH", global = true)]
+    #[arg(long, env = "PERIDIO_CA_PATH")]
     ca_path: Option<PathBuf>,
 
-    #[arg(long, env = "PERIDIO_ORGANIZATION_NAME", global = true)]
+    #[arg(long, env = "PERIDIO_ORGANIZATION_NAME")]
     organization_name: Option<String>,
+
+    #[arg(long)]
+    profile: Option<String>,
+
+    #[arg(long)]
+    config_directory: Option<String>,
 }
 
 impl Program {
-    async fn run(self) -> Result<(), Error> {
-        if let Some(path) = self.global_options.ca_path {
+    async fn run(mut self) -> Result<(), Error> {
+        if let Some(path) = &self.global_options.ca_path {
             if !path.exists() {
                 return Err(Error::NonExistingPath {
-                    path,
+                    path: path.to_path_buf(),
                     source: std::io::Error::from(ErrorKind::NotFound),
                 });
             }
         }
 
+        // parse config files if profile config is provided
+
+        if let Some(config) = Config::read_config_file(
+            &self.global_options.profile,
+            &self.global_options.config_directory,
+        ) {
+            // profile was provided
+            if self.global_options.api_key.is_none() {
+                if let Some(api_key) = config.api_key {
+                    self.global_options.api_key = Some(api_key);
+                };
+            }
+
+            if self.global_options.base_url.is_none() {
+                if let Some(base_url) = config.base_url {
+                    self.global_options.base_url = Some(base_url);
+                };
+            };
+
+            if self.global_options.ca_path.is_none() {
+                if let Some(ca_path) = config.ca_path {
+                    self.global_options.ca_path = Some(ca_path.into());
+                };
+            };
+
+            if self.global_options.organization_name.is_none() {
+                if let Some(organization_name) = config.organization_name {
+                    self.global_options.organization_name = Some(organization_name);
+                };
+            }
+        }
+
         match self.command {
-            Command::Api(cmd) => cmd.run().await?,
+            Command::CliCommand(cmd) => cmd.run(self.global_options).await?,
         };
 
         Ok(())
@@ -99,7 +139,7 @@ impl Program {
 #[command(about = "Work with Peridio from the command line.")]
 enum Command {
     #[command(flatten)]
-    Api(api::ApiCommand),
+    CliCommand(api::CliCommands),
 }
 
 #[tokio::main]

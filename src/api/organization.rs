@@ -2,6 +2,7 @@ use super::Command;
 use crate::print_json;
 use crate::ApiSnafu;
 use crate::Error;
+use crate::GlobalOptions;
 use clap::Parser;
 use peridio_sdk::api::organization_users::{
     AddOrganizationUserParams, GetOrganizationUserParams, ListOrganizationUserParams,
@@ -21,13 +22,13 @@ pub enum OrganizationCommand {
 }
 
 impl OrganizationCommand {
-    pub async fn run(self) -> Result<(), Error> {
+    pub async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         match self {
-            Self::AddUser(cmd) => cmd.run().await,
-            Self::RemoveUser(cmd) => cmd.run().await,
-            Self::GetUser(cmd) => cmd.run().await,
-            Self::ListUsers(cmd) => cmd.run().await,
-            Self::UpdateUser(cmd) => cmd.run().await,
+            Self::AddUser(cmd) => cmd.run(global_options).await,
+            Self::RemoveUser(cmd) => cmd.run(global_options).await,
+            Self::GetUser(cmd) => cmd.run(global_options).await,
+            Self::ListUsers(cmd) => cmd.run(global_options).await,
+            Self::UpdateUser(cmd) => cmd.run(global_options).await,
         }
     }
 }
@@ -42,17 +43,17 @@ pub struct AddUserCommand {
 }
 
 impl Command<AddUserCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = AddOrganizationUserParams {
-            organization_name: self.organization_name,
+            organization_name: global_options.organization_name.unwrap(),
             role: self.inner.role,
             username: self.inner.username,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: self.api_key,
-            endpoint: self.base_url,
-            ca_bundle_path: self.ca_path,
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
         });
 
         match api
@@ -76,16 +77,16 @@ pub struct RemoveUserCommand {
 }
 
 impl Command<RemoveUserCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = RemoveOrganizationUserParams {
-            organization_name: self.organization_name,
+            organization_name: global_options.organization_name.unwrap(),
             user_username: self.inner.user_username,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: self.api_key,
-            endpoint: self.base_url,
-            ca_bundle_path: self.ca_path,
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
         });
 
         if (api
@@ -109,16 +110,16 @@ pub struct GetUserCommand {
 }
 
 impl Command<GetUserCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = GetOrganizationUserParams {
-            organization_name: self.organization_name,
+            organization_name: global_options.organization_name.unwrap(),
             user_username: self.inner.user_username,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: self.api_key,
-            endpoint: self.base_url,
-            ca_bundle_path: self.ca_path,
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
         });
 
         match api
@@ -139,15 +140,15 @@ impl Command<GetUserCommand> {
 pub struct ListUsersCommand {}
 
 impl Command<ListUsersCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListOrganizationUserParams {
-            organization_name: self.organization_name,
+            organization_name: global_options.organization_name.unwrap(),
         };
 
         let api = Api::new(ApiOptions {
-            api_key: self.api_key,
-            endpoint: self.base_url,
-            ca_bundle_path: self.ca_path,
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
         });
 
         match api
@@ -174,17 +175,17 @@ pub struct UpdateUserCommand {
 }
 
 impl Command<UpdateUserCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = UpdateOrganizationUserParams {
-            organization_name: self.organization_name,
+            organization_name: global_options.organization_name.unwrap(),
             role: self.inner.role,
             user_username: self.inner.user_username,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: self.api_key,
-            endpoint: self.base_url,
-            ca_bundle_path: self.ca_path,
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
         });
 
         match api

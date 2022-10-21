@@ -2,6 +2,7 @@ use super::Command;
 use crate::print_json;
 use crate::ApiSnafu;
 use crate::Error;
+use crate::GlobalOptions;
 use clap::Parser;
 use peridio_sdk::api::Api;
 use peridio_sdk::api::ApiOptions;
@@ -13,9 +14,9 @@ pub enum UsersCommand {
 }
 
 impl UsersCommand {
-    pub async fn run(self) -> Result<(), Error> {
+    pub async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         match self {
-            Self::Me(cmd) => cmd.run().await,
+            Self::Me(cmd) => cmd.run(global_options).await,
         }
     }
 }
@@ -24,11 +25,11 @@ impl UsersCommand {
 pub struct MeCommand {}
 
 impl Command<MeCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let api = Api::new(ApiOptions {
-            api_key: self.api_key,
-            endpoint: self.base_url,
-            ca_bundle_path: self.ca_path,
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
         });
 
         match api.users().me().await.context(ApiSnafu)? {
