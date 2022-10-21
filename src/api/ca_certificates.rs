@@ -2,16 +2,16 @@ use std::fs;
 use std::path::PathBuf;
 
 use super::Command;
-use crate::{print_json, ApiSnafu, Error, FileSnafu, GlobalOptions};
+use crate::{print_json, ApiSnafu, Error, NonExistingPathSnafu};
+use clap::Parser;
 use peridio_sdk::api::ca_certificates::{
     CreateCaCertificateParams, CreateVerificationCodeParams, DeleteCaCertificateParams,
     GetCaCertificateParams, ListCaCertificateParams,
 };
 use peridio_sdk::api::{Api, ApiOptions, CaCertificateJitp, UpdateCaCertificateParams};
 use snafu::ResultExt;
-use structopt::StructOpt;
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub enum CaCertificatesCommand {
     Create(Command<CreateCommand>),
     Delete(Command<DeleteCommand>),
@@ -22,47 +22,49 @@ pub enum CaCertificatesCommand {
 }
 
 impl CaCertificatesCommand {
-    pub async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    pub async fn run(self) -> Result<(), Error> {
         match self {
-            Self::Create(cmd) => cmd.run(global_options).await,
-            Self::Delete(cmd) => cmd.run(global_options).await,
-            Self::Get(cmd) => cmd.run(global_options).await,
-            Self::List(cmd) => cmd.run(global_options).await,
-            Self::Update(cmd) => cmd.run(global_options).await,
-            Self::CreateVerificationCode(cmd) => cmd.run(global_options).await,
+            Self::Create(cmd) => cmd.run().await,
+            Self::Delete(cmd) => cmd.run().await,
+            Self::Get(cmd) => cmd.run().await,
+            Self::List(cmd) => cmd.run().await,
+            Self::Update(cmd) => cmd.run().await,
+            Self::CreateVerificationCode(cmd) => cmd.run().await,
         }
     }
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct CreateCommand {
-    #[structopt(long)]
-    organization_name: String,
-
-    #[structopt(parse(from_os_str), long, short = "c")]
+    #[arg(long, short = 'c')]
     certificate_path: PathBuf,
 
-    #[structopt(parse(from_os_str), long, short = "v")]
+    #[arg(long, short = 'v')]
     verification_certificate_path: PathBuf,
 
-    #[structopt(long)]
+    #[arg(long)]
     description: Option<String>,
 
-    #[structopt(long, requires_all = &["jitp-tags", "jitp-product-id"])]
+    #[arg(long, requires_all = &["jitp_tags", "jitp_product_name"])]
     jitp_description: Option<String>,
 
-    #[structopt(long, requires_all = &["jitp-description", "jitp-product-id"])]
+    #[arg(long, requires_all = &["jitp_description", "jitp_product_name"])]
     jitp_tags: Vec<String>,
 
-    #[structopt(long, requires_all = &["jitp-tags", "jitp-description"])]
+    #[arg(long, requires_all = &["jitp_tags", "jitp_description"])]
     jitp_product_name: Option<String>,
 }
 
 impl Command<CreateCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
-        let cert = fs::read_to_string(self.inner.certificate_path).context(FileSnafu)?;
-        let verification_cert =
-            fs::read_to_string(self.inner.verification_certificate_path).context(FileSnafu)?;
+    async fn run(self) -> Result<(), Error> {
+        let cert =
+            fs::read_to_string(&self.inner.certificate_path).context(NonExistingPathSnafu {
+                path: &self.inner.certificate_path,
+            })?;
+        let verification_cert = fs::read_to_string(self.inner.verification_certificate_path)
+            .context(NonExistingPathSnafu {
+                path: &self.inner.certificate_path,
+            })?;
 
         let cert_base64 = base64::encode(cert);
         let verification_cert_base64 = base64::encode(verification_cert);
@@ -82,7 +84,7 @@ impl Command<CreateCommand> {
         };
 
         let params = CreateCaCertificateParams {
-            organization_name: self.inner.organization_name,
+            organization_name: self.organization_name,
             certificate: cert_base64,
             verification_certificate: verification_cert_base64,
             description: self.inner.description,
@@ -90,8 +92,9 @@ impl Command<CreateCommand> {
         };
 
         let api = Api::new(ApiOptions {
-            api_key: global_options.api_key,
-            endpoint: global_options.base_url,
+            api_key: self.api_key,
+            endpoint: self.base_url,
+            ca_bundle_path: self.ca_path,
         });
 
         match api
@@ -108,25 +111,23 @@ impl Command<CreateCommand> {
     }
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct DeleteCommand {
-    #[structopt(long)]
-    organization_name: String,
-
-    #[structopt(long)]
+    #[arg(long)]
     ca_certificate_serial: String,
 }
 
 impl Command<DeleteCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    async fn run(self) -> Result<(), Error> {
         let params = DeleteCaCertificateParams {
-            organization_name: self.inner.organization_name,
+            organization_name: self.organization_name,
             ca_certificate_serial: self.inner.ca_certificate_serial,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: global_options.api_key,
-            endpoint: global_options.base_url,
+            api_key: self.api_key,
+            endpoint: self.base_url,
+            ca_bundle_path: self.ca_path,
         });
 
         if (api
@@ -143,25 +144,23 @@ impl Command<DeleteCommand> {
     }
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct GetCommand {
-    #[structopt(long)]
-    organization_name: String,
-
-    #[structopt(long)]
+    #[arg(long)]
     ca_certificate_serial: String,
 }
 
 impl Command<GetCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    async fn run(self) -> Result<(), Error> {
         let params = GetCaCertificateParams {
-            organization_name: self.inner.organization_name,
+            organization_name: self.organization_name,
             ca_certificate_serial: self.inner.ca_certificate_serial,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: global_options.api_key,
-            endpoint: global_options.base_url,
+            api_key: self.api_key,
+            endpoint: self.base_url,
+            ca_bundle_path: self.ca_path,
         });
 
         match api.ca_certificates().get(params).await.context(ApiSnafu)? {
@@ -173,21 +172,19 @@ impl Command<GetCommand> {
     }
 }
 
-#[derive(StructOpt, Debug)]
-pub struct ListCommand {
-    #[structopt(long)]
-    organization_name: String,
-}
+#[derive(Parser, Debug)]
+pub struct ListCommand {}
 
 impl Command<ListCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    async fn run(self) -> Result<(), Error> {
         let params = ListCaCertificateParams {
-            organization_name: self.inner.organization_name,
+            organization_name: self.organization_name,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: global_options.api_key,
-            endpoint: global_options.base_url,
+            api_key: self.api_key,
+            endpoint: self.base_url,
+            ca_bundle_path: self.ca_path,
         });
 
         match api.ca_certificates().list(params).await.context(ApiSnafu)? {
@@ -199,32 +196,29 @@ impl Command<ListCommand> {
     }
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct UpdateCommand {
-    #[structopt(long)]
-    organization_name: String,
-
-    #[structopt(long)]
+    #[arg(long)]
     ca_certificate_serial: String,
 
-    #[structopt(long)]
+    #[arg(long)]
     description: Option<String>,
 
-    #[structopt(long, conflicts_with_all = &["jitp-description", "jitp-tags", "jitp-product-name"])]
+    #[arg(long, conflicts_with_all = &["jitp_description", "jitp_tags", "jitp_product_name"])]
     disable_jitp: bool,
 
-    #[structopt(long, requires_all = &["jitp-tags", "jitp-product-name"])]
+    #[arg(long, requires_all = &["jitp_tags", "jitp_product_name"])]
     jitp_description: Option<String>,
 
-    #[structopt(long, requires_all = &["jitp-description", "jitp-product-name"])]
+    #[arg(long, requires_all = &["jitp_description", "jitp_product_name"])]
     jitp_tags: Vec<String>,
 
-    #[structopt(long, requires_all = &["jitp-tags", "jitp-description"])]
+    #[arg(long, requires_all = &["jitp_tags", "jitp_description"])]
     jitp_product_name: Option<String>,
 }
 
 impl Command<UpdateCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    async fn run(self) -> Result<(), Error> {
         let jitp = if self.inner.disable_jitp {
             // disable jitp
             Some(None)
@@ -244,15 +238,16 @@ impl Command<UpdateCommand> {
         };
 
         let params = UpdateCaCertificateParams {
-            organization_name: self.inner.organization_name,
+            organization_name: self.organization_name,
             ca_certificate_serial: self.inner.ca_certificate_serial,
             description: self.inner.description,
             jitp,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: global_options.api_key,
-            endpoint: global_options.base_url,
+            api_key: self.api_key,
+            endpoint: self.base_url,
+            ca_bundle_path: self.ca_path,
         });
 
         match api
@@ -269,21 +264,19 @@ impl Command<UpdateCommand> {
     }
 }
 
-#[derive(StructOpt, Debug)]
-pub struct CreateVerificationCodeCommand {
-    #[structopt(long)]
-    organization_name: String,
-}
+#[derive(Parser, Debug)]
+pub struct CreateVerificationCodeCommand {}
 
 impl Command<CreateVerificationCodeCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    async fn run(self) -> Result<(), Error> {
         let params = CreateVerificationCodeParams {
-            organization_name: self.inner.organization_name,
+            organization_name: self.organization_name,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: global_options.api_key,
-            endpoint: global_options.base_url,
+            api_key: self.api_key,
+            endpoint: self.base_url,
+            ca_bundle_path: self.ca_path,
         });
 
         match api

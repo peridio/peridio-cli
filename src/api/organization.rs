@@ -2,7 +2,7 @@ use super::Command;
 use crate::print_json;
 use crate::ApiSnafu;
 use crate::Error;
-use crate::GlobalOptions;
+use clap::Parser;
 use peridio_sdk::api::organization_users::{
     AddOrganizationUserParams, GetOrganizationUserParams, ListOrganizationUserParams,
     RemoveOrganizationUserParams, UpdateOrganizationUserParams,
@@ -10,9 +10,8 @@ use peridio_sdk::api::organization_users::{
 use peridio_sdk::api::Api;
 use peridio_sdk::api::ApiOptions;
 use snafu::ResultExt;
-use structopt::StructOpt;
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub enum OrganizationCommand {
     AddUser(Command<AddUserCommand>),
     RemoveUser(Command<RemoveUserCommand>),
@@ -22,40 +21,38 @@ pub enum OrganizationCommand {
 }
 
 impl OrganizationCommand {
-    pub async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    pub async fn run(self) -> Result<(), Error> {
         match self {
-            Self::AddUser(cmd) => cmd.run(global_options).await,
-            Self::RemoveUser(cmd) => cmd.run(global_options).await,
-            Self::GetUser(cmd) => cmd.run(global_options).await,
-            Self::ListUsers(cmd) => cmd.run(global_options).await,
-            Self::UpdateUser(cmd) => cmd.run(global_options).await,
+            Self::AddUser(cmd) => cmd.run().await,
+            Self::RemoveUser(cmd) => cmd.run().await,
+            Self::GetUser(cmd) => cmd.run().await,
+            Self::ListUsers(cmd) => cmd.run().await,
+            Self::UpdateUser(cmd) => cmd.run().await,
         }
     }
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct AddUserCommand {
-    #[structopt(long)]
-    organization_name: String,
-
-    #[structopt(long)]
+    #[arg(long)]
     role: String,
 
-    #[structopt(long)]
+    #[arg(long)]
     username: String,
 }
 
 impl Command<AddUserCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    async fn run(self) -> Result<(), Error> {
         let params = AddOrganizationUserParams {
-            organization_name: self.inner.organization_name,
+            organization_name: self.organization_name,
             role: self.inner.role,
             username: self.inner.username,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: global_options.api_key,
-            endpoint: global_options.base_url,
+            api_key: self.api_key,
+            endpoint: self.base_url,
+            ca_bundle_path: self.ca_path,
         });
 
         match api
@@ -72,25 +69,23 @@ impl Command<AddUserCommand> {
     }
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct RemoveUserCommand {
-    #[structopt(long)]
-    organization_name: String,
-
-    #[structopt(long)]
+    #[arg(long)]
     user_username: String,
 }
 
 impl Command<RemoveUserCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    async fn run(self) -> Result<(), Error> {
         let params = RemoveOrganizationUserParams {
-            organization_name: self.inner.organization_name,
+            organization_name: self.organization_name,
             user_username: self.inner.user_username,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: global_options.api_key,
-            endpoint: global_options.base_url,
+            api_key: self.api_key,
+            endpoint: self.base_url,
+            ca_bundle_path: self.ca_path,
         });
 
         if (api
@@ -107,25 +102,23 @@ impl Command<RemoveUserCommand> {
     }
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct GetUserCommand {
-    #[structopt(long)]
-    organization_name: String,
-
-    #[structopt(long)]
+    #[arg(long)]
     user_username: String,
 }
 
 impl Command<GetUserCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    async fn run(self) -> Result<(), Error> {
         let params = GetOrganizationUserParams {
-            organization_name: self.inner.organization_name,
+            organization_name: self.organization_name,
             user_username: self.inner.user_username,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: global_options.api_key,
-            endpoint: global_options.base_url,
+            api_key: self.api_key,
+            endpoint: self.base_url,
+            ca_bundle_path: self.ca_path,
         });
 
         match api
@@ -142,21 +135,19 @@ impl Command<GetUserCommand> {
     }
 }
 
-#[derive(StructOpt, Debug)]
-pub struct ListUsersCommand {
-    #[structopt(long)]
-    organization_name: String,
-}
+#[derive(Parser, Debug)]
+pub struct ListUsersCommand {}
 
 impl Command<ListUsersCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    async fn run(self) -> Result<(), Error> {
         let params = ListOrganizationUserParams {
-            organization_name: self.inner.organization_name,
+            organization_name: self.organization_name,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: global_options.api_key,
-            endpoint: global_options.base_url,
+            api_key: self.api_key,
+            endpoint: self.base_url,
+            ca_bundle_path: self.ca_path,
         });
 
         match api
@@ -173,29 +164,27 @@ impl Command<ListUsersCommand> {
     }
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct UpdateUserCommand {
-    #[structopt(long)]
-    organization_name: String,
-
-    #[structopt(long)]
+    #[arg(long)]
     role: String,
 
-    #[structopt(long)]
+    #[arg(long)]
     user_username: String,
 }
 
 impl Command<UpdateUserCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    async fn run(self) -> Result<(), Error> {
         let params = UpdateOrganizationUserParams {
-            organization_name: self.inner.organization_name,
+            organization_name: self.organization_name,
             role: self.inner.role,
             user_username: self.inner.user_username,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: global_options.api_key,
-            endpoint: global_options.base_url,
+            api_key: self.api_key,
+            endpoint: self.base_url,
+            ca_bundle_path: self.ca_path,
         });
 
         match api
