@@ -2,7 +2,7 @@ use super::Command;
 use crate::print_json;
 use crate::ApiSnafu;
 use crate::Error;
-use crate::GlobalOptions;
+use clap::Parser;
 use peridio_sdk::api::deployments::CreateDeploymentParams;
 use peridio_sdk::api::deployments::DeleteDeploymentParams;
 use peridio_sdk::api::deployments::GetDeploymentParams;
@@ -14,10 +14,9 @@ use peridio_sdk::api::DeploymentCondition;
 use peridio_sdk::api::UpdateDeployment;
 use peridio_sdk::api::UpdateDeploymentCondition;
 use snafu::ResultExt;
-use structopt::StructOpt;
 use uuid::Uuid;
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub enum DeploymentsCommand {
     Create(Command<CreateCommand>),
     Delete(Command<DeleteCommand>),
@@ -27,43 +26,40 @@ pub enum DeploymentsCommand {
 }
 
 impl DeploymentsCommand {
-    pub async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    pub async fn run(self) -> Result<(), Error> {
         match self {
-            Self::Create(cmd) => cmd.run(global_options).await,
-            Self::Delete(cmd) => cmd.run(global_options).await,
-            Self::Get(cmd) => cmd.run(global_options).await,
-            Self::List(cmd) => cmd.run(global_options).await,
-            Self::Update(cmd) => cmd.run(global_options).await,
+            Self::Create(cmd) => cmd.run().await,
+            Self::Delete(cmd) => cmd.run().await,
+            Self::Get(cmd) => cmd.run().await,
+            Self::List(cmd) => cmd.run().await,
+            Self::Update(cmd) => cmd.run().await,
         }
     }
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct CreateCommand {
-    #[structopt(long)]
+    #[arg(long)]
     firmware: Uuid,
 
-    #[structopt(long)]
-    organization_name: String,
-
-    #[structopt(long)]
+    #[arg(long)]
     product_name: String,
 
-    #[structopt(long)]
+    #[arg(long)]
     name: String,
 
-    #[structopt(long, required = true)]
+    #[arg(long, required = true)]
     tags: Vec<String>,
 
-    #[structopt(long)]
+    #[arg(long)]
     version: Option<String>,
 }
 
 impl Command<CreateCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    async fn run(self) -> Result<(), Error> {
         let params = CreateDeploymentParams {
             firmware: self.inner.firmware.to_string(),
-            organization_name: self.inner.organization_name,
+            organization_name: self.organization_name,
             product_name: self.inner.product_name,
             name: self.inner.name,
             is_active: false, // must be false
@@ -74,8 +70,9 @@ impl Command<CreateCommand> {
         };
 
         let api = Api::new(ApiOptions {
-            api_key: global_options.api_key,
-            endpoint: global_options.base_url,
+            api_key: self.api_key,
+            endpoint: self.base_url,
+            ca_bundle_path: self.ca_path,
         });
 
         match api.deployments().create(params).await.context(ApiSnafu)? {
@@ -87,29 +84,27 @@ impl Command<CreateCommand> {
     }
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct DeleteCommand {
-    #[structopt(long)]
+    #[arg(long)]
     deployment_name: String,
 
-    #[structopt(long)]
-    organization_name: String,
-
-    #[structopt(long)]
+    #[arg(long)]
     product_name: String,
 }
 
 impl Command<DeleteCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    async fn run(self) -> Result<(), Error> {
         let params = DeleteDeploymentParams {
             deployment_name: self.inner.deployment_name,
-            organization_name: self.inner.organization_name,
+            organization_name: self.organization_name,
             product_name: self.inner.product_name,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: global_options.api_key,
-            endpoint: global_options.base_url,
+            api_key: self.api_key,
+            endpoint: self.base_url,
+            ca_bundle_path: self.ca_path,
         });
 
         if (api.deployments().delete(params).await.context(ApiSnafu)?).is_some() {
@@ -120,29 +115,27 @@ impl Command<DeleteCommand> {
     }
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct GetCommand {
-    #[structopt(long)]
+    #[arg(long)]
     deployment_name: String,
 
-    #[structopt(long)]
-    organization_name: String,
-
-    #[structopt(long)]
+    #[arg(long)]
     product_name: String,
 }
 
 impl Command<GetCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    async fn run(self) -> Result<(), Error> {
         let params = GetDeploymentParams {
             deployment_name: self.inner.deployment_name,
-            organization_name: self.inner.organization_name,
+            organization_name: self.organization_name,
             product_name: self.inner.product_name,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: global_options.api_key,
-            endpoint: global_options.base_url,
+            api_key: self.api_key,
+            endpoint: self.base_url,
+            ca_bundle_path: self.ca_path,
         });
 
         match api.deployments().get(params).await.context(ApiSnafu)? {
@@ -154,25 +147,23 @@ impl Command<GetCommand> {
     }
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct ListCommand {
-    #[structopt(long)]
-    organization_name: String,
-
-    #[structopt(long)]
+    #[arg(long)]
     product_name: String,
 }
 
 impl Command<ListCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    async fn run(self) -> Result<(), Error> {
         let params = ListDeploymentParams {
-            organization_name: self.inner.organization_name,
+            organization_name: self.organization_name,
             product_name: self.inner.product_name,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: global_options.api_key,
-            endpoint: global_options.base_url,
+            api_key: self.api_key,
+            endpoint: self.base_url,
+            ca_bundle_path: self.ca_path,
         });
 
         match api.deployments().list(params).await.context(ApiSnafu)? {
@@ -184,35 +175,32 @@ impl Command<ListCommand> {
     }
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct UpdateCommand {
-    #[structopt(long)]
+    #[arg(long)]
     deployment_name: String,
 
-    #[structopt(long)]
+    #[arg(long)]
     firmware: Option<Uuid>,
 
-    #[structopt(long)]
+    #[arg(long)]
     is_active: Option<bool>,
 
-    #[structopt(long)]
-    organization_name: String,
-
-    #[structopt(long)]
+    #[arg(long)]
     product_name: String,
 
-    #[structopt(long)]
+    #[arg(long)]
     name: Option<String>,
 
-    #[structopt(long)]
+    #[arg(long)]
     tags: Option<Vec<String>>,
 
-    #[structopt(long)]
+    #[arg(long)]
     version: Option<String>,
 }
 
 impl Command<UpdateCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    async fn run(self) -> Result<(), Error> {
         let firmware = self.inner.firmware.map(|uuid| uuid.to_string());
 
         let mut condition = UpdateDeploymentCondition {
@@ -239,14 +227,15 @@ impl Command<UpdateCommand> {
 
         let params = UpdateDeploymentParams {
             deployment_name: self.inner.deployment_name.to_string(),
-            organization_name: self.inner.organization_name,
+            organization_name: self.organization_name,
             product_name: self.inner.product_name,
             deployment,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: global_options.api_key,
-            endpoint: global_options.base_url,
+            api_key: self.api_key,
+            endpoint: self.base_url,
+            ca_bundle_path: self.ca_path,
         });
 
         match api.deployments().update(params).await.context(ApiSnafu)? {

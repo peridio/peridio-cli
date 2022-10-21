@@ -2,14 +2,13 @@ use super::Command;
 use crate::print_json;
 use crate::ApiSnafu;
 use crate::Error;
-use crate::GlobalOptions;
+use clap::Parser;
 use peridio_sdk::api::signing_keys::{CreateParams, DeleteParams, GetParams, ListParams};
 use peridio_sdk::api::Api;
 use peridio_sdk::api::ApiOptions;
 use snafu::ResultExt;
-use structopt::StructOpt;
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub enum SigningKeysCommand {
     Create(Command<CreateCommand>),
     Delete(Command<DeleteCommand>),
@@ -18,39 +17,37 @@ pub enum SigningKeysCommand {
 }
 
 impl SigningKeysCommand {
-    pub async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    pub async fn run(self) -> Result<(), Error> {
         match self {
-            Self::Create(cmd) => cmd.run(global_options).await,
-            Self::Delete(cmd) => cmd.run(global_options).await,
-            Self::Get(cmd) => cmd.run(global_options).await,
-            Self::List(cmd) => cmd.run(global_options).await,
+            Self::Create(cmd) => cmd.run().await,
+            Self::Delete(cmd) => cmd.run().await,
+            Self::Get(cmd) => cmd.run().await,
+            Self::List(cmd) => cmd.run().await,
         }
     }
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct CreateCommand {
-    #[structopt(long)]
+    #[arg(long)]
     key: String,
 
-    #[structopt(long)]
+    #[arg(long)]
     name: String,
-
-    #[structopt(long)]
-    organization_name: String,
 }
 
 impl Command<CreateCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    async fn run(self) -> Result<(), Error> {
         let params = CreateParams {
             key: self.inner.key,
             name: self.inner.name,
-            organization_name: self.inner.organization_name,
+            organization_name: self.organization_name,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: global_options.api_key,
-            endpoint: global_options.base_url,
+            api_key: self.api_key,
+            endpoint: self.base_url,
+            ca_bundle_path: self.ca_path,
         });
 
         match api.signing_keys().create(params).await.context(ApiSnafu)? {
@@ -62,25 +59,23 @@ impl Command<CreateCommand> {
     }
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct DeleteCommand {
-    #[structopt(long)]
+    #[arg(long)]
     name: String,
-
-    #[structopt(long)]
-    organization_name: String,
 }
 
 impl Command<DeleteCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    async fn run(self) -> Result<(), Error> {
         let params = DeleteParams {
             name: self.inner.name,
-            organization_name: self.inner.organization_name,
+            organization_name: self.organization_name,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: global_options.api_key,
-            endpoint: global_options.base_url,
+            api_key: self.api_key,
+            endpoint: self.base_url,
+            ca_bundle_path: self.ca_path,
         });
 
         if (api.signing_keys().delete(params).await.context(ApiSnafu)?).is_some() {
@@ -91,25 +86,23 @@ impl Command<DeleteCommand> {
     }
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct GetCommand {
-    #[structopt(long)]
+    #[arg(long)]
     name: String,
-
-    #[structopt(long)]
-    organization_name: String,
 }
 
 impl Command<GetCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    async fn run(self) -> Result<(), Error> {
         let params = GetParams {
             name: self.inner.name,
-            organization_name: self.inner.organization_name,
+            organization_name: self.organization_name,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: global_options.api_key,
-            endpoint: global_options.base_url,
+            api_key: self.api_key,
+            endpoint: self.base_url,
+            ca_bundle_path: self.ca_path,
         });
 
         match api.signing_keys().get(params).await.context(ApiSnafu)? {
@@ -121,21 +114,19 @@ impl Command<GetCommand> {
     }
 }
 
-#[derive(StructOpt, Debug)]
-pub struct ListCommand {
-    #[structopt(long)]
-    organization_name: String,
-}
+#[derive(Parser, Debug)]
+pub struct ListCommand {}
 
 impl Command<ListCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    async fn run(self) -> Result<(), Error> {
         let params = ListParams {
-            organization_name: self.inner.organization_name,
+            organization_name: self.organization_name,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: global_options.api_key,
-            endpoint: global_options.base_url,
+            api_key: self.api_key,
+            endpoint: self.base_url,
+            ca_bundle_path: self.ca_path,
         });
 
         match api.signing_keys().list(params).await.context(ApiSnafu)? {

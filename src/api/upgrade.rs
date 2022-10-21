@@ -6,13 +6,13 @@ use std::{
     path::Path,
 };
 
+use clap::Parser;
 use directories::ProjectDirs;
 use flate2::read::GzDecoder;
 use futures_util::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::ClientBuilder;
 use serde::Deserialize;
-use structopt::StructOpt;
 use tar::Archive;
 
 use crate::Error;
@@ -28,27 +28,14 @@ struct GithubResponse {
     assets: Vec<GithubAssetResponse>,
 }
 
-#[derive(StructOpt, Debug)]
-pub enum UpgradeCommand {
-    Upgrade(DoUpgradeCommand),
+#[derive(Parser, Debug)]
+pub struct UpgradeCommand {
+    #[arg(long)]
+    version: Option<String>,
 }
 
 impl UpgradeCommand {
     pub async fn run(self) -> Result<(), Error> {
-        match self {
-            Self::Upgrade(cmd) => cmd.run().await,
-        }
-    }
-}
-
-#[derive(StructOpt, Debug)]
-pub struct DoUpgradeCommand {
-    #[structopt(long)]
-    version: Option<String>,
-}
-
-impl DoUpgradeCommand {
-    async fn run(self) -> Result<(), Error> {
         if let Some(proj_dirs) = ProjectDirs::from("com", "peridio", "peridio cli") {
             let cache_dir = proj_dirs.cache_dir();
 
