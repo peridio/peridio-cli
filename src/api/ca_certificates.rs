@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use super::Command;
-use crate::{print_json, ApiSnafu, Error, NonExistingPathSnafu};
+use crate::{print_json, ApiSnafu, Error, GlobalOptions, NonExistingPathSnafu};
 use clap::Parser;
 use peridio_sdk::api::ca_certificates::{
     CreateCaCertificateParams, CreateVerificationCodeParams, DeleteCaCertificateParams,
@@ -22,14 +22,14 @@ pub enum CaCertificatesCommand {
 }
 
 impl CaCertificatesCommand {
-    pub async fn run(self) -> Result<(), Error> {
+    pub async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         match self {
-            Self::Create(cmd) => cmd.run().await,
-            Self::Delete(cmd) => cmd.run().await,
-            Self::Get(cmd) => cmd.run().await,
-            Self::List(cmd) => cmd.run().await,
-            Self::Update(cmd) => cmd.run().await,
-            Self::CreateVerificationCode(cmd) => cmd.run().await,
+            Self::Create(cmd) => cmd.run(global_options).await,
+            Self::Delete(cmd) => cmd.run(global_options).await,
+            Self::Get(cmd) => cmd.run(global_options).await,
+            Self::List(cmd) => cmd.run(global_options).await,
+            Self::Update(cmd) => cmd.run(global_options).await,
+            Self::CreateVerificationCode(cmd) => cmd.run(global_options).await,
         }
     }
 }
@@ -56,7 +56,7 @@ pub struct CreateCommand {
 }
 
 impl Command<CreateCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let cert =
             fs::read_to_string(&self.inner.certificate_path).context(NonExistingPathSnafu {
                 path: &self.inner.certificate_path,
@@ -84,7 +84,7 @@ impl Command<CreateCommand> {
         };
 
         let params = CreateCaCertificateParams {
-            organization_name: self.organization_name,
+            organization_name: global_options.organization_name.unwrap(),
             certificate: cert_base64,
             verification_certificate: verification_cert_base64,
             description: self.inner.description,
@@ -92,9 +92,9 @@ impl Command<CreateCommand> {
         };
 
         let api = Api::new(ApiOptions {
-            api_key: self.api_key,
-            endpoint: self.base_url,
-            ca_bundle_path: self.ca_path,
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
         });
 
         match api
@@ -118,16 +118,16 @@ pub struct DeleteCommand {
 }
 
 impl Command<DeleteCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = DeleteCaCertificateParams {
-            organization_name: self.organization_name,
+            organization_name: global_options.organization_name.unwrap(),
             ca_certificate_serial: self.inner.ca_certificate_serial,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: self.api_key,
-            endpoint: self.base_url,
-            ca_bundle_path: self.ca_path,
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
         });
 
         if (api
@@ -151,16 +151,16 @@ pub struct GetCommand {
 }
 
 impl Command<GetCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = GetCaCertificateParams {
-            organization_name: self.organization_name,
+            organization_name: global_options.organization_name.unwrap(),
             ca_certificate_serial: self.inner.ca_certificate_serial,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: self.api_key,
-            endpoint: self.base_url,
-            ca_bundle_path: self.ca_path,
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
         });
 
         match api.ca_certificates().get(params).await.context(ApiSnafu)? {
@@ -176,15 +176,15 @@ impl Command<GetCommand> {
 pub struct ListCommand {}
 
 impl Command<ListCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListCaCertificateParams {
-            organization_name: self.organization_name,
+            organization_name: global_options.organization_name.unwrap(),
         };
 
         let api = Api::new(ApiOptions {
-            api_key: self.api_key,
-            endpoint: self.base_url,
-            ca_bundle_path: self.ca_path,
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
         });
 
         match api.ca_certificates().list(params).await.context(ApiSnafu)? {
@@ -218,7 +218,7 @@ pub struct UpdateCommand {
 }
 
 impl Command<UpdateCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let jitp = if self.inner.disable_jitp {
             // disable jitp
             Some(None)
@@ -238,16 +238,16 @@ impl Command<UpdateCommand> {
         };
 
         let params = UpdateCaCertificateParams {
-            organization_name: self.organization_name,
+            organization_name: global_options.organization_name.unwrap(),
             ca_certificate_serial: self.inner.ca_certificate_serial,
             description: self.inner.description,
             jitp,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: self.api_key,
-            endpoint: self.base_url,
-            ca_bundle_path: self.ca_path,
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
         });
 
         match api
@@ -268,15 +268,15 @@ impl Command<UpdateCommand> {
 pub struct CreateVerificationCodeCommand {}
 
 impl Command<CreateVerificationCodeCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = CreateVerificationCodeParams {
-            organization_name: self.organization_name,
+            organization_name: global_options.organization_name.unwrap(),
         };
 
         let api = Api::new(ApiOptions {
-            api_key: self.api_key,
-            endpoint: self.base_url,
-            ca_bundle_path: self.ca_path,
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
         });
 
         match api

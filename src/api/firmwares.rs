@@ -2,6 +2,7 @@ use super::Command;
 use crate::print_json;
 use crate::ApiSnafu;
 use crate::Error;
+use crate::GlobalOptions;
 use clap::Parser;
 use peridio_sdk::api::firmwares::{
     CreateFirmwareParams, DeleteFirmwareParams, GetFirmwareParams, ListFirmwareParams,
@@ -20,12 +21,12 @@ pub enum FirmwaresCommand {
 }
 
 impl FirmwaresCommand {
-    pub async fn run(self) -> Result<(), Error> {
+    pub async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         match self {
-            Self::Create(cmd) => cmd.run().await,
-            Self::Delete(cmd) => cmd.run().await,
-            Self::Get(cmd) => cmd.run().await,
-            Self::List(cmd) => cmd.run().await,
+            Self::Create(cmd) => cmd.run(global_options).await,
+            Self::Delete(cmd) => cmd.run(global_options).await,
+            Self::Get(cmd) => cmd.run(global_options).await,
+            Self::List(cmd) => cmd.run(global_options).await,
         }
     }
 }
@@ -43,18 +44,18 @@ pub struct CreateCommand {
 }
 
 impl Command<CreateCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = CreateFirmwareParams {
             firmware_path: self.inner.firmware_path,
-            organization_name: self.organization_name,
+            organization_name: global_options.organization_name.unwrap(),
             product_name: self.inner.product_name,
             ttl: self.inner.ttl,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: self.api_key,
-            endpoint: self.base_url,
-            ca_bundle_path: self.ca_path,
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
         });
 
         match api.firmwares().create(params).await.context(ApiSnafu)? {
@@ -76,17 +77,17 @@ pub struct DeleteCommand {
 }
 
 impl Command<DeleteCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = DeleteFirmwareParams {
             firmware_uuid: self.inner.firmware_uuid.to_string(),
-            organization_name: self.organization_name,
+            organization_name: global_options.organization_name.unwrap(),
             product_name: self.inner.product_name,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: self.api_key,
-            endpoint: self.base_url,
-            ca_bundle_path: self.ca_path,
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
         });
 
         if (api.firmwares().delete(params).await.context(ApiSnafu)?).is_some() {
@@ -107,17 +108,17 @@ pub struct GetCommand {
 }
 
 impl Command<GetCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = GetFirmwareParams {
             firmware_uuid: self.inner.firmware_uuid.to_string(),
-            organization_name: self.organization_name,
+            organization_name: global_options.organization_name.unwrap(),
             product_name: self.inner.product_name,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: self.api_key,
-            endpoint: self.base_url,
-            ca_bundle_path: self.ca_path,
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
         });
 
         match api.firmwares().get(params).await.context(ApiSnafu)? {
@@ -136,16 +137,16 @@ pub struct ListCommand {
 }
 
 impl Command<ListCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListFirmwareParams {
-            organization_name: self.organization_name,
+            organization_name: global_options.organization_name.unwrap(),
             product_name: self.inner.product_name,
         };
 
         let api = Api::new(ApiOptions {
-            api_key: self.api_key,
-            endpoint: self.base_url,
-            ca_bundle_path: self.ca_path,
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
         });
 
         match api.firmwares().list(params).await.context(ApiSnafu)? {

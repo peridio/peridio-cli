@@ -2,6 +2,7 @@ use super::Command;
 use crate::print_json;
 use crate::ApiSnafu;
 use crate::Error;
+use crate::GlobalOptions;
 use clap::Parser;
 use peridio_sdk::api::signing_keys::{CreateParams, DeleteParams, GetParams, ListParams};
 use peridio_sdk::api::Api;
@@ -17,12 +18,12 @@ pub enum SigningKeysCommand {
 }
 
 impl SigningKeysCommand {
-    pub async fn run(self) -> Result<(), Error> {
+    pub async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         match self {
-            Self::Create(cmd) => cmd.run().await,
-            Self::Delete(cmd) => cmd.run().await,
-            Self::Get(cmd) => cmd.run().await,
-            Self::List(cmd) => cmd.run().await,
+            Self::Create(cmd) => cmd.run(global_options).await,
+            Self::Delete(cmd) => cmd.run(global_options).await,
+            Self::Get(cmd) => cmd.run(global_options).await,
+            Self::List(cmd) => cmd.run(global_options).await,
         }
     }
 }
@@ -37,17 +38,17 @@ pub struct CreateCommand {
 }
 
 impl Command<CreateCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = CreateParams {
             key: self.inner.key,
             name: self.inner.name,
-            organization_name: self.organization_name,
+            organization_name: global_options.organization_name.unwrap(),
         };
 
         let api = Api::new(ApiOptions {
-            api_key: self.api_key,
-            endpoint: self.base_url,
-            ca_bundle_path: self.ca_path,
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
         });
 
         match api.signing_keys().create(params).await.context(ApiSnafu)? {
@@ -66,16 +67,16 @@ pub struct DeleteCommand {
 }
 
 impl Command<DeleteCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = DeleteParams {
             name: self.inner.name,
-            organization_name: self.organization_name,
+            organization_name: global_options.organization_name.unwrap(),
         };
 
         let api = Api::new(ApiOptions {
-            api_key: self.api_key,
-            endpoint: self.base_url,
-            ca_bundle_path: self.ca_path,
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
         });
 
         if (api.signing_keys().delete(params).await.context(ApiSnafu)?).is_some() {
@@ -93,16 +94,16 @@ pub struct GetCommand {
 }
 
 impl Command<GetCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = GetParams {
             name: self.inner.name,
-            organization_name: self.organization_name,
+            organization_name: global_options.organization_name.unwrap(),
         };
 
         let api = Api::new(ApiOptions {
-            api_key: self.api_key,
-            endpoint: self.base_url,
-            ca_bundle_path: self.ca_path,
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
         });
 
         match api.signing_keys().get(params).await.context(ApiSnafu)? {
@@ -118,15 +119,15 @@ impl Command<GetCommand> {
 pub struct ListCommand {}
 
 impl Command<ListCommand> {
-    async fn run(self) -> Result<(), Error> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListParams {
-            organization_name: self.organization_name,
+            organization_name: global_options.organization_name.unwrap(),
         };
 
         let api = Api::new(ApiOptions {
-            api_key: self.api_key,
-            endpoint: self.base_url,
-            ca_bundle_path: self.ca_path,
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
         });
 
         match api.signing_keys().list(params).await.context(ApiSnafu)? {
