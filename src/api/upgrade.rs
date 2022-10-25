@@ -36,7 +36,7 @@ pub struct UpgradeCommand {
 
 impl UpgradeCommand {
     pub async fn run(self) -> Result<(), Error> {
-        if let Some(proj_dirs) = ProjectDirs::from("com", "peridio", "peridio cli") {
+        if let Some(proj_dirs) = ProjectDirs::from("", "", "peridio") {
             let cache_dir = proj_dirs.cache_dir();
 
             create_dir_all(cache_dir).unwrap();

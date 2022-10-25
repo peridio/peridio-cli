@@ -1,5 +1,6 @@
 mod api;
 mod config;
+mod utils;
 
 use std::{
     fmt,
@@ -10,6 +11,8 @@ use std::{
 use clap::Parser;
 use config::Config;
 use snafu::Snafu;
+
+use crate::utils::{Style, StyledStr};
 
 #[macro_export]
 #[allow(clippy::crate_in_macro_def)]
@@ -65,22 +68,22 @@ struct Program {
 
 #[derive(Parser)]
 pub struct GlobalOptions {
-    #[arg(long, env = "PERIDIO_API_KEY", hide_env_values = true)]
+    #[arg(long, env = "PERIDIO_API_KEY", hide_env_values = true, short = 'a')]
     api_key: Option<String>,
 
-    #[arg(long, env = "PERIDIO_BASE_URL")]
+    #[arg(long, env = "PERIDIO_BASE_URL", short = 'b')]
     base_url: Option<String>,
 
-    #[arg(long, env = "PERIDIO_CA_PATH")]
+    #[arg(long, env = "PERIDIO_CA_PATH", short = 'c')]
     ca_path: Option<PathBuf>,
 
-    #[arg(long, env = "PERIDIO_ORGANIZATION_NAME")]
+    #[arg(long, env = "PERIDIO_ORGANIZATION_NAME", short = 'o')]
     organization_name: Option<String>,
 
-    #[arg(long)]
+    #[arg(long, short = 'p')]
     profile: Option<String>,
 
-    #[arg(long)]
+    #[arg(long, short = 'd')]
     config_directory: Option<String>,
 }
 
@@ -151,36 +154,11 @@ async fn main() {
             }
 
             Error::NonExistingPath { path, source: _ } => {
-                use std::io::Write;
-                use termcolor::WriteColor;
-
-                let bufwtr = termcolor::BufferWriter::stderr(termcolor::ColorChoice::Always);
-                let mut buffer = bufwtr.buffer();
-
-                buffer
-                    .set_color(
-                        termcolor::ColorSpec::new()
-                            .set_fg(Some(termcolor::Color::Red))
-                            .set_bold(true),
-                    )
-                    .unwrap();
-
-                write!(&mut buffer, "error: ").unwrap();
-
-                buffer.set_color(&termcolor::ColorSpec::new()).unwrap();
-
-                writeln!(&mut buffer, "Path does not exist:").unwrap();
-
-                buffer
-                    .set_color(termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::Yellow)))
-                    .unwrap();
-
-                writeln!(&mut buffer, "\t{}", path.display()).unwrap();
-
-                bufwtr.print(&buffer).unwrap();
-
-                // DATAERR
-                std::process::exit(65);
+                let mut error = StyledStr::new();
+                error.push_str(Some(Style::Error), "error: ".to_string());
+                error.push_str(None, "Path does not exist:\r\n".to_string());
+                error.push_str(Some(Style::Warning), format!("\t{}", path.display()));
+                error.print_data_err();
             }
 
             error => eprintln!("Error: {}", error),

@@ -3,6 +3,8 @@ use std::{collections::HashMap, fs, path::PathBuf};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 
+use crate::utils::{Style, StyledStr};
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Config {
     #[serde(default)]
@@ -38,8 +40,8 @@ impl Config {
             } else {
                 panic!("The provided config directory is invalid");
             }
-        } else if let Some(proj_dirs) = ProjectDirs::from("com", "peridio", "peridio cli") {
-            let cache_dir = proj_dirs.cache_dir();
+        } else if let Some(proj_dirs) = ProjectDirs::from("", "", "peridio") {
+            let cache_dir = proj_dirs.config_dir();
 
             fs::create_dir_all(cache_dir).unwrap();
 
@@ -67,6 +69,27 @@ impl Config {
             let config_file =
                 fs::read_to_string(&config_dir_path).expect("Cannot read config file");
             serde_json::from_str(&config_file).expect("Cannot read config file")
+        } else if profile.is_some() {
+            let mut error = StyledStr::new();
+
+            error.push_str(Some(Style::Error), "error: ".to_string());
+            error.push_str(None, "Config file not found at ".to_string());
+
+            // pop the config, so we can canonicalize the path since it already exist
+            config_dir_path.pop();
+            error.push_str(None, "'".to_string());
+            error.push_str(
+                Some(Style::Warning),
+                format!(
+                    "{}/{}",
+                    fs::canonicalize(&config_dir_path)
+                        .unwrap()
+                        .to_string_lossy(),
+                    "config.json"
+                ),
+            );
+            error.push_str(None, "'".to_string());
+            error.print_data_err()
         } else {
             HashMap::new()
         };
@@ -84,12 +107,30 @@ impl Config {
         // get the profile or default it
         if let Some(profile) = profile {
             // profile was provided, try to get it
-            Some(
-                config
-                    .get(profile)
-                    .expect("The provided profile name does not exist")
-                    .to_owned(),
-            )
+            if let Some(profile) = config.get(profile) {
+                Some(profile.to_owned())
+            } else {
+                let mut error = StyledStr::new();
+
+                error.push_str(Some(Style::Error), "error: ".to_string());
+                error.push_str(None, "Profile ".to_string());
+                error.push_str(None, "'".to_string());
+                error.push_str(Some(Style::Warning), profile.to_string());
+                error.push_str(None, "'".to_string());
+                error.push_str(None, " not found in ".to_string());
+                error.push_str(None, "'".to_string());
+                error.push_str(
+                    Some(Style::Warning),
+                    format!(
+                        "{}",
+                        fs::canonicalize(&config_dir_path)
+                            .unwrap()
+                            .to_string_lossy()
+                    ),
+                );
+                error.push_str(None, "'".to_string());
+                error.print_data_err()
+            }
         } else if !config.is_empty() {
             // try get default if hashmap length is > 0
             config.retain(|_, v| v.default);
