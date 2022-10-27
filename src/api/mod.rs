@@ -10,7 +10,10 @@ mod upgrade;
 mod users;
 use clap::Parser;
 
-use crate::GlobalOptions;
+use crate::{
+    utils::{Style, StyledStr},
+    GlobalOptions,
+};
 
 #[derive(Parser, Debug)]
 pub struct Command<T>
@@ -68,44 +71,17 @@ impl CliCommands {
                 }
 
                 if !error_vec.is_empty() {
-                    use std::io::Write;
-                    use termcolor::WriteColor;
+                    let mut error = StyledStr::new();
 
-                    let bufwtr = termcolor::BufferWriter::stderr(termcolor::ColorChoice::Always);
-                    let mut buffer = bufwtr.buffer();
-
-                    buffer
-                        .set_color(
-                            termcolor::ColorSpec::new()
-                                .set_fg(Some(termcolor::Color::Red))
-                                .set_bold(true),
-                        )
-                        .unwrap();
-
-                    write!(&mut buffer, "error: ").unwrap();
-
-                    buffer.set_color(&termcolor::ColorSpec::new()).unwrap();
-
-                    writeln!(
-                        &mut buffer,
-                        "The following arguments are required at the global level:"
-                    )
-                    .unwrap();
-
-                    buffer
-                        .set_color(
-                            termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::Green)),
-                        )
-                        .unwrap();
-
-                    for error in error_vec.iter() {
-                        writeln!(&mut buffer, "\t{}", error).unwrap();
+                    error.push_str(Some(Style::Error), "error: ".to_string());
+                    error.push_str(
+                        None,
+                        "The following arguments are required at the global level:\r\n".to_string(),
+                    );
+                    for error_msg in error_vec.iter() {
+                        error.push_str(Some(Style::Success), format!("\t{}\r\n", error_msg));
                     }
-
-                    bufwtr.print(&buffer).unwrap();
-
-                    // DATAERR
-                    std::process::exit(65);
+                    error.print_data_err();
                 }
 
                 match api {
