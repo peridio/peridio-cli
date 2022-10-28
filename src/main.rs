@@ -80,10 +80,15 @@ pub struct GlobalOptions {
     #[arg(long, env = "PERIDIO_ORGANIZATION_NAME", short = 'o')]
     organization_name: Option<String>,
 
-    #[arg(long, short = 'p')]
+    #[arg(long, env = "PERIDIO_PROFILE", short = 'p')]
     profile: Option<String>,
 
-    #[arg(long, short = 'd')]
+    #[arg(
+        long,
+        env = "PERIDIO_CONFIG_DIRECTORY",
+        short = 'd',
+        requires = "profile"
+    )]
     config_directory: Option<String>,
 }
 

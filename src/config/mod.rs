@@ -8,9 +8,6 @@ use crate::utils::{Style, StyledStr};
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Config {
     #[serde(default)]
-    pub default: bool,
-
-    #[serde(default)]
     pub api_key: Option<String>,
 
     pub base_url: Option<String>,
@@ -104,9 +101,8 @@ impl Config {
             }
         }
 
-        // get the profile or default it
+        // get the profile
         if let Some(profile) = profile {
-            // profile was provided, try to get it
             if let Some(profile) = config.get(profile) {
                 Some(profile.to_owned())
             } else {
@@ -130,14 +126,6 @@ impl Config {
                 );
                 error.push_str(None, "'".to_string());
                 error.print_data_err()
-            }
-        } else if !config.is_empty() {
-            // try get default if hashmap length is > 0
-            config.retain(|_, v| v.default);
-            if config.len() == 1 {
-                Some(config.values().next().unwrap().to_owned())
-            } else {
-                panic!("You don't have or have multiple configs marked as default")
             }
         } else {
             // otherwise return None
