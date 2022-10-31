@@ -51,9 +51,6 @@ impl ProductsCommand {
 #[derive(Parser, Debug)]
 pub struct CreateCommand {
     #[arg(long)]
-    delta_updatable: Option<bool>,
-
-    #[arg(long)]
     name: String,
 }
 
@@ -62,7 +59,6 @@ impl Command<CreateCommand> {
         let params = CreateProductParams {
             organization_name: global_options.organization_name.unwrap(),
             name: self.inner.name,
-            delta_updatable: self.inner.delta_updatable,
         };
 
         let api = Api::new(ApiOptions {
@@ -162,9 +158,6 @@ impl Command<ListCommand> {
 #[derive(Parser, Debug)]
 pub struct UpdateCommand {
     #[arg(long)]
-    delta_updatable: Option<bool>,
-
-    #[arg(long)]
     name: Option<String>,
 
     #[arg(long)]
@@ -177,7 +170,6 @@ impl Command<UpdateCommand> {
             organization_name: global_options.organization_name.unwrap(),
             product_name: self.inner.product_name,
             product: UpdateProduct {
-                delta_updatable: self.inner.delta_updatable,
                 name: self.inner.name,
             },
         };

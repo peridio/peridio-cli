@@ -41,6 +41,9 @@ impl DeploymentsCommand {
 #[derive(Parser, Debug)]
 pub struct CreateCommand {
     #[arg(long)]
+    delta_updatable: Option<bool>,
+
+    #[arg(long)]
     firmware: Uuid,
 
     #[arg(long)]
@@ -68,6 +71,7 @@ impl Command<CreateCommand> {
                 tags: self.inner.tags,
                 version: self.inner.version,
             },
+            delta_updatable: self.inner.delta_updatable,
         };
 
         let api = Api::new(ApiOptions {
@@ -179,6 +183,9 @@ impl Command<ListCommand> {
 #[derive(Parser, Debug)]
 pub struct UpdateCommand {
     #[arg(long)]
+    delta_updatable: Option<bool>,
+
+    #[arg(long)]
     deployment_name: String,
 
     #[arg(long)]
@@ -224,6 +231,7 @@ impl Command<UpdateCommand> {
             },
             firmware,
             is_active: self.inner.is_active,
+            delta_updatable: self.inner.delta_updatable,
         };
 
         let params = UpdateDeploymentParams {
