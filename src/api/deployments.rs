@@ -218,7 +218,7 @@ impl Command<UpdateCommand> {
 
         let deployment = UpdateDeployment {
             name: self.inner.name,
-            conditions: if self.inner.tags != None || self.inner.version != None {
+            conditions: if self.inner.tags.is_some() || self.inner.version.is_some() {
                 let tags = self.inner.tags;
                 let version = self.inner.version;
 
