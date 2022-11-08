@@ -140,7 +140,7 @@ impl UpgradeCommand {
         let mut archive = Archive::new(gz);
 
         archive
-            .unpack(&download_path)
+            .unpack(download_path)
             .map_err(|_| "Error while saving the updated file".to_string())?;
 
         Ok(())
