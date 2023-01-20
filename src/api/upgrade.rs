@@ -20,6 +20,7 @@ use crate::Error;
 #[derive(Deserialize, Debug)]
 struct GithubAssetResponse {
     browser_download_url: String,
+    name: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -43,13 +44,30 @@ impl UpgradeCommand {
 
             if let Ok(resp) = Self::get_release_info(self.version).await {
                 let current_version = env!("CARGO_PKG_VERSION");
-                let github_asset_info = resp.assets.first().unwrap();
 
                 // no need to update
                 if resp.tag_name == current_version {
                     println!("CLI already up to date");
                     return Ok(());
                 }
+
+                let name = format!(
+                    "peridio-{}_{}.tar.gz",
+                    env!("CARGO_PKG_VERSION"),
+                    env!("TARGET")
+                );
+
+                let github_asset_info = match resp.assets.iter().find(|&x| x.name == name) {
+                    Some(x) => x,
+                    None => {
+                        println!(
+                            "version {} does not include a pre-built binary for target {}",
+                            env!("CARGO_PKG_VERSION"),
+                            env!("TARGET")
+                        );
+                        return Ok(());
+                    }
+                };
 
                 if let Err(message) = Self::download_update(cache_dir, github_asset_info).await {
                     println!("{}", message);
