@@ -105,8 +105,8 @@ jobs:
             "./target/${{ matrix.target }}/release/peridio-cli.zip"
       - name: Package release
         run: |
-          mv ./target/${{ matrix.target }}/release/peridio-cli${{ matrix.suffix }} ./peridio.exe
-          tar -czf peridio-${{ github.ref_name }}_${{ matrix.target }}.tar.gz ./peridio.exe
+          mv ./target/${{ matrix.target }}/release/peridio-cli${{ matrix.suffix }} ./peridio${{ matrix.suffix }}
+          tar -czf peridio-${{ github.ref_name }}_${{ matrix.target }}.tar.gz ./peridio${{ matrix.suffix }}
       - name: Upload Release
         uses: softprops/action-gh-release@v1
         with:
