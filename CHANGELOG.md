@@ -2,6 +2,12 @@
 
 Peridio CLI 0.6 expands the number of targets we provide pre-built binaries for.
 
+## 0.6.1
+
+### Fixes
+
+- Only suffix pre-built binaries for Windows with ".exe".
+
 ## 0.6.0
 
 ### Enhancements
