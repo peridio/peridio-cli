@@ -1,3 +1,4 @@
+use std::env;
 use std::process::Command;
 
 fn main() {
@@ -12,4 +13,5 @@ fn main() {
         env!("CARGO_PKG_VERSION"),
         git_hash
     );
+    println!("cargo:rustc-env=TARGET={}", env::var("TARGET").unwrap());
 }
