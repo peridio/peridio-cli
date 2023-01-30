@@ -2,6 +2,12 @@
 
 Peridio CLI 0.6 expands the number of targets we provide pre-built binaries for.
 
+## 0.6.2
+
+### Fixes
+
+- Fixed bug where decoding device payloads that included firmware metadata would fail.
+
 ## 0.6.1
 
 ### Fixes

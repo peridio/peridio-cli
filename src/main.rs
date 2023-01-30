@@ -52,7 +52,7 @@ pub enum Error {
 
 impl fmt::Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -155,7 +155,7 @@ async fn main() {
     if let Err(e) = Program::parse().run().await {
         match e {
             Error::Api { source } => {
-                eprintln!("{}", source)
+                eprintln!("{source}")
             }
 
             Error::NonExistingPath { path, source: _ } => {
@@ -166,7 +166,7 @@ async fn main() {
                 error.print_data_err();
             }
 
-            error => eprintln!("Error: {}", error),
+            error => eprintln!("Error: {error}"),
         }
     }
 }

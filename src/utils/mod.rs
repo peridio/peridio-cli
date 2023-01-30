@@ -39,7 +39,7 @@ impl StyledStr {
             }
 
             buffer.set_color(&color)?;
-            write!(buffer, "{}", message)?;
+            write!(buffer, "{message}")?;
         }
 
         write!(buffer, "\r\n")?;
