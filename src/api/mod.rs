@@ -79,7 +79,7 @@ impl CliCommands {
                         "The following arguments are required at the global level:\r\n".to_string(),
                     );
                     for error_msg in error_vec.iter() {
-                        error.push_str(Some(Style::Success), format!("\t{}\r\n", error_msg));
+                        error.push_str(Some(Style::Success), format!("\t{error_msg}\r\n"));
                     }
                     error.print_data_err();
                 }

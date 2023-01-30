@@ -2,7 +2,7 @@ use std::{
     cmp::min,
     env,
     fs::{create_dir_all, rename},
-    io::{Cursor, ErrorKind, Seek, SeekFrom, Write},
+    io::{Cursor, ErrorKind, Seek, Write},
     path::Path,
 };
 
@@ -70,12 +70,12 @@ impl UpgradeCommand {
                 };
 
                 if let Err(message) = Self::download_update(cache_dir, github_asset_info).await {
-                    println!("{}", message);
+                    println!("{message}");
                     return Ok(());
                 }
 
                 if let Err(message) = Self::apply_update(cache_dir, &resp) {
-                    println!("{}", message);
+                    println!("{message}");
                     return Ok(());
                 }
             }
@@ -120,11 +120,11 @@ impl UpgradeCommand {
             .get(url)
             .send()
             .await
-            .map_err(|_| format!("Failed to GET from '{}'", url))?;
+            .map_err(|_| format!("Failed to GET from '{url}'"))?;
 
         let total_size = res
             .content_length()
-            .ok_or(format!("Failed to get content length from '{}'", url))?;
+            .ok_or(format!("Failed to get content length from '{url}'"))?;
 
         // Indicatif setup
         let pb = ProgressBar::new(total_size);
@@ -151,7 +151,7 @@ impl UpgradeCommand {
 
         pb.finish_and_clear();
 
-        buff.seek(SeekFrom::Start(0)).unwrap();
+        buff.rewind().unwrap();
 
         let gz = GzDecoder::new(&mut buff);
 
@@ -167,10 +167,7 @@ impl UpgradeCommand {
     async fn get_release_info(version: Option<String>) -> Result<GithubResponse, reqwest::Error> {
         let client = ClientBuilder::new().use_rustls_tls().build()?;
         let url = if let Some(version) = version {
-            format!(
-                "https://api.github.com/repos/peridio/morel/releases/tags/{}",
-                version
-            )
+            format!("https://api.github.com/repos/peridio/morel/releases/tags/{version}")
         } else {
             "https://api.github.com/repos/peridio/morel/releases/latest".to_owned()
         };
