@@ -599,7 +599,7 @@ checksum = "d4fd5641d01c8f18a23da7b6fe29298ff4b55afcccdf78973b24cf3175fee32e"
 
 [[package]]
 name = "peridio-cli"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "base64",
  "clap",
@@ -622,7 +622,7 @@ dependencies = [
 [[package]]
 name = "peridio-sdk"
 version = "0.1.0"
-source = "git+ssh://git@github.com/peridio/reishi.git?rev=1a6ad07#1a6ad075d2e70ae42b6e9d3e07ba74e1eca83e7b"
+source = "git+ssh://git@github.com/peridio/reishi.git?rev=d2426a6#d2426a6e8f679aa4e1a863acbc9d767d2f23bc4c"
 dependencies = [
  "chrono",
  "reqwest",
