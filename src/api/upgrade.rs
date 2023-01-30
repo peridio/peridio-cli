@@ -51,18 +51,14 @@ impl UpgradeCommand {
                     return Ok(());
                 }
 
-                let name = format!(
-                    "peridio-{}_{}.tar.gz",
-                    env!("CARGO_PKG_VERSION"),
-                    env!("TARGET")
-                );
+                let name = format!("peridio-{}_{}.tar.gz", resp.tag_name, env!("TARGET"));
 
                 let github_asset_info = match resp.assets.iter().find(|&x| x.name == name) {
                     Some(x) => x,
                     None => {
                         println!(
                             "version {} does not include a pre-built binary for target {}",
-                            env!("CARGO_PKG_VERSION"),
+                            resp.tag_name,
                             env!("TARGET")
                         );
                         return Ok(());
