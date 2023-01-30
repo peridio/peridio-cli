@@ -1,6 +1,15 @@
 # Changelog for peridio 0.6
 
+**NOTE:** if you are currently using a version < 0.6.3, you must upgrade manually from
+https://github.com/peridio/morel/releases.
+
 Peridio CLI 0.6 expands the number of targets we provide pre-built binaries for.
+
+## 0.6.3
+
+### Fixes
+
+- Fixed bug where resolving a new version via `peridio upgrade` would fail.
 
 ## 0.6.2
 

@@ -748,7 +748,7 @@ checksum = "478c572c3d73181ff3c2539045f6eb99e5491218eae919370993b890cdbdd98e"
 
 [[package]]
 name = "peridio-cli"
-version = "0.6.2"
+version = "0.6.3"
 dependencies = [
  "base64 0.13.1",
  "clap",
