@@ -5,6 +5,12 @@ https://github.com/peridio/morel/releases.
 
 Peridio CLI 0.6 expands the number of targets we provide pre-built binaries for.
 
+## 0.6.4
+
+### Fixes
+
+- Fixed bug during device creation.
+
 ## 0.6.3
 
 ### Fixes
