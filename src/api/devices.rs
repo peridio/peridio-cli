@@ -56,6 +56,9 @@ pub struct CreateCommand {
 
     #[arg(long)]
     tags: Option<Vec<String>>,
+
+    #[arg(long)]
+    target: Option<String>,
 }
 
 impl Command<CreateCommand> {
@@ -68,6 +71,7 @@ impl Command<CreateCommand> {
             identifier: self.inner.identifier,
             last_communication: self.inner.last_communication,
             tags: self.inner.tags,
+            target: self.inner.target,
         };
 
         let api = Api::new(ApiOptions {
@@ -195,6 +199,9 @@ pub struct UpdateCommand {
 
     #[arg(long)]
     tags: Option<Vec<String>>,
+
+    #[arg(long)]
+    target: Option<String>,
 }
 
 impl Command<UpdateCommand> {
@@ -207,6 +214,7 @@ impl Command<UpdateCommand> {
             last_communication: self.inner.last_communication,
             tags: self.inner.tags,
             product_name: self.inner.product_name,
+            target: self.inner.target,
         };
 
         let api = Api::new(ApiOptions {
