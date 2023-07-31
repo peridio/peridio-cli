@@ -5,6 +5,12 @@ https://github.com/peridio/morel/releases.
 
 Peridio CLI 0.7 adds support for setting a device's target during creation and update.
 
+## 0.7.1
+
+### Fixes
+
+- Fix authn regression in CI release creation.
+
 ## 0.7.0
 
 ### Improvements
