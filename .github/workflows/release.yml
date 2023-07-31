@@ -5,6 +5,8 @@ on:
 
 jobs:
   release:
+    permissions:
+      contents: write
     runs-on: "${{ matrix.os }}"
     env:
       CARGO_NET_GIT_FETCH_WITH_CLI: true
