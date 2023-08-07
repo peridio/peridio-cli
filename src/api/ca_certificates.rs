@@ -53,6 +53,9 @@ pub struct CreateCommand {
 
     #[arg(long, requires_all = &["jitp_tags", "jitp_description"])]
     jitp_product_name: Option<String>,
+
+    #[arg(long)]
+    jitp_cohort_prn: Option<String>,
 }
 
 impl Command<CreateCommand> {
@@ -78,6 +81,7 @@ impl Command<CreateCommand> {
                 description,
                 tags: self.inner.jitp_tags,
                 product_name,
+                cohort_prn: self.inner.jitp_cohort_prn,
             })
         } else {
             None
@@ -215,6 +219,9 @@ pub struct UpdateCommand {
 
     #[arg(long, requires_all = &["jitp_tags", "jitp_description"])]
     jitp_product_name: Option<String>,
+
+    #[arg(long)]
+    jitp_cohort_prn: Option<String>,
 }
 
 impl Command<UpdateCommand> {
@@ -231,6 +238,7 @@ impl Command<UpdateCommand> {
                 description,
                 tags: self.inner.jitp_tags,
                 product_name,
+                cohort_prn: self.inner.jitp_cohort_prn,
             }))
         } else {
             //do nothing
