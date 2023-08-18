@@ -4,22 +4,22 @@ use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
 use clap::Parser;
-use peridio_sdk::api::artifacts::{
-    CreateArtifactParams, GetArtifactParams, ListArtifactsParams, UpdateArtifactParams,
+use peridio_sdk::api::cohorts::{
+    CreateCohortParams, GetCohortParams, ListCohortsParams, UpdateCohortParams,
 };
 use peridio_sdk::api::Api;
 use peridio_sdk::api::ApiOptions;
 use snafu::ResultExt;
 
 #[derive(Parser, Debug)]
-pub enum ArtifactsCommand {
+pub enum CohortsCommand {
     Create(Command<CreateCommand>),
     List(Command<ListCommand>),
     Get(Command<GetCommand>),
     Update(Command<UpdateCommand>),
 }
 
-impl ArtifactsCommand {
+impl CohortsCommand {
     pub async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         match self {
             Self::Create(cmd) => cmd.run(global_options).await,
@@ -41,14 +41,18 @@ pub struct CreateCommand {
 
     #[arg(long)]
     organization_prn: String,
+
+    #[arg(long)]
+    product_prn: String,
 }
 
 impl Command<CreateCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
-        let params = CreateArtifactParams {
+        let params = CreateCohortParams {
             description: self.inner.description,
             name: self.inner.name,
             organization_prn: self.inner.organization_prn,
+            product_prn: self.inner.product_prn,
         };
 
         let api = Api::new(ApiOptions {
@@ -57,8 +61,8 @@ impl Command<CreateCommand> {
             ca_bundle_path: global_options.ca_path,
         });
 
-        match api.artifacts().create(params).await.context(ApiSnafu)? {
-            Some(artifact) => print_json!(&artifact),
+        match api.cohorts().create(params).await.context(ApiSnafu)? {
+            Some(cohort) => print_json!(&cohort),
             None => panic!(),
         }
 
@@ -80,7 +84,7 @@ pub struct ListCommand {
 
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
-        let params = ListArtifactsParams {
+        let params = ListCohortsParams {
             limit: self.inner.limit,
             order: self.inner.order,
             search: self.inner.search,
@@ -93,8 +97,8 @@ impl Command<ListCommand> {
             ca_bundle_path: global_options.ca_path,
         });
 
-        match api.artifacts().list(params).await.context(ApiSnafu)? {
-            Some(artifact) => print_json!(&artifact),
+        match api.cohorts().list(params).await.context(ApiSnafu)? {
+            Some(cohort) => print_json!(&cohort),
             None => panic!(),
         }
 
@@ -110,7 +114,7 @@ pub struct GetCommand {
 
 impl Command<GetCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
-        let params = GetArtifactParams {
+        let params = GetCohortParams {
             prn: self.inner.prn,
         };
 
@@ -120,8 +124,8 @@ impl Command<GetCommand> {
             ca_bundle_path: global_options.ca_path,
         });
 
-        match api.artifacts().get(params).await.context(ApiSnafu)? {
-            Some(artifact) => print_json!(&artifact),
+        match api.cohorts().get(params).await.context(ApiSnafu)? {
+            Some(cohort) => print_json!(&cohort),
             None => panic!(),
         }
 
@@ -143,7 +147,7 @@ pub struct UpdateCommand {
 
 impl Command<UpdateCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
-        let params = UpdateArtifactParams {
+        let params = UpdateCohortParams {
             prn: self.inner.prn,
             description: self.inner.description,
             name: self.inner.name,
@@ -155,8 +159,8 @@ impl Command<UpdateCommand> {
             ca_bundle_path: global_options.ca_path,
         });
 
-        match api.artifacts().update(params).await.context(ApiSnafu)? {
-            Some(device) => print_json!(&device),
+        match api.cohorts().update(params).await.context(ApiSnafu)? {
+            Some(cohort) => print_json!(&cohort),
             None => panic!(),
         }
 

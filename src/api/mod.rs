@@ -1,4 +1,6 @@
+mod artifacts;
 mod ca_certificates;
+mod cohorts;
 mod deployments;
 mod device_certificates;
 mod devices;
@@ -52,6 +54,10 @@ pub enum ApiCommand {
     SigningKeys(signing_keys::SigningKeysCommand),
     #[command(subcommand)]
     Users(users::UsersCommand),
+    #[command(subcommand)]
+    Artifacts(artifacts::ArtifactsCommand),
+    #[command(subcommand)]
+    Cohorts(cohorts::CohortsCommand),
 }
 
 impl CliCommands {
@@ -94,6 +100,8 @@ impl CliCommands {
                     ApiCommand::Products(cmd) => cmd.run(global_options).await?,
                     ApiCommand::SigningKeys(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Users(cmd) => cmd.run(global_options).await?,
+                    ApiCommand::Artifacts(cmd) => cmd.run(global_options).await?,
+                    ApiCommand::Cohorts(cmd) => cmd.run(global_options).await?,
                 }
             }
             CliCommands::Upgrade(cmd) => cmd.run().await?,
