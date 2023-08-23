@@ -41,7 +41,7 @@ impl DeploymentsCommand {
 #[derive(Parser, Debug)]
 pub struct CreateCommand {
     #[arg(long)]
-    delta_updatable: Option<bool>,
+    delta_updatable: bool,
 
     #[arg(long)]
     firmware: Uuid,
