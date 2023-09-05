@@ -105,33 +105,32 @@ impl Program {
 
         // parse config files if profile config is provided
 
-        if let Some(config) = Config::read_config_file(
-            &self.global_options.profile,
-            &self.global_options.config_directory,
-        ) {
-            // profile was provided
-            if self.global_options.api_key.is_none() {
-                if let Some(api_key) = config.api_key {
-                    self.global_options.api_key = Some(api_key);
-                };
-            }
+        if let Some(config) = Config::parse(&self.global_options.config_directory) {
+            if let Some(profile) = config.get_profile(&self.global_options.profile) {
+                // profile was provided
+                if self.global_options.api_key.is_none() {
+                    if let Some(api_key) = profile.api_key {
+                        self.global_options.api_key = Some(api_key);
+                    };
+                }
 
-            if self.global_options.base_url.is_none() {
-                if let Some(base_url) = config.base_url {
-                    self.global_options.base_url = Some(base_url);
+                if self.global_options.base_url.is_none() {
+                    if let Some(base_url) = profile.base_url {
+                        self.global_options.base_url = Some(base_url);
+                    };
                 };
-            };
 
-            if self.global_options.ca_path.is_none() {
-                if let Some(ca_path) = config.ca_path {
-                    self.global_options.ca_path = Some(ca_path.into());
+                if self.global_options.ca_path.is_none() {
+                    if let Some(ca_path) = profile.ca_path {
+                        self.global_options.ca_path = Some(ca_path.into());
+                    };
                 };
-            };
 
-            if self.global_options.organization_name.is_none() {
-                if let Some(organization_name) = config.organization_name {
-                    self.global_options.organization_name = Some(organization_name);
-                };
+                if self.global_options.organization_name.is_none() {
+                    if let Some(organization_name) = profile.organization_name {
+                        self.global_options.organization_name = Some(organization_name);
+                    };
+                }
             }
         }
 

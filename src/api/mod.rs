@@ -1,4 +1,7 @@
 mod artifacts;
+mod binaries;
+mod binary_parts;
+mod binary_signatures;
 mod ca_certificates;
 mod cohorts;
 mod deployments;
@@ -11,11 +14,9 @@ mod signing_keys;
 mod upgrade;
 mod users;
 use clap::Parser;
-
-use crate::{
-    utils::{Style, StyledStr},
-    GlobalOptions,
-};
+use crate:: utils::Style;
+use crate:: utils::StyledStr;
+use crate::GlobalOptions;
 
 #[derive(Parser, Debug)]
 pub struct Command<T>
@@ -37,6 +38,16 @@ pub enum CliCommands {
 #[derive(clap::Subcommand, Debug)]
 pub enum ApiCommand {
     #[command(subcommand)]
+    Artifacts(artifacts::ArtifactsCommand),
+    #[command(subcommand)]
+    Binaries(binaries::BinariesCommand),
+    #[command(subcommand)]
+    BinaryParts(binary_parts::BinaryPartsCommand),
+    #[command(subcommand)]
+    BinarySignatures(binary_signatures::BinarySignaturesCommand),
+    #[command(subcommand)]
+    Cohorts(cohorts::CohortsCommand),
+    #[command(subcommand)]
     CaCertificates(ca_certificates::CaCertificatesCommand),
     #[command(subcommand)]
     Deployments(deployments::DeploymentsCommand),
@@ -54,10 +65,6 @@ pub enum ApiCommand {
     SigningKeys(signing_keys::SigningKeysCommand),
     #[command(subcommand)]
     Users(users::UsersCommand),
-    #[command(subcommand)]
-    Artifacts(artifacts::ArtifactsCommand),
-    #[command(subcommand)]
-    Cohorts(cohorts::CohortsCommand),
 }
 
 impl CliCommands {
@@ -91,17 +98,20 @@ impl CliCommands {
                 }
 
                 match api {
+                    ApiCommand::Artifacts(cmd) => cmd.run(global_options).await?,
+                    ApiCommand::Binaries(cmd) => cmd.run(global_options).await?,
+                    ApiCommand::BinaryParts(cmd) => cmd.run(global_options).await?,
+                    ApiCommand::BinarySignatures(cmd) => cmd.run(global_options).await?,
                     ApiCommand::CaCertificates(cmd) => cmd.run(global_options).await?,
+                    ApiCommand::Cohorts(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Deployments(cmd) => cmd.run(global_options).await?,
-                    ApiCommand::Devices(cmd) => cmd.run(global_options).await?,
                     ApiCommand::DeviceCertificates(cmd) => cmd.run(global_options).await?,
+                    ApiCommand::Devices(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Firmwares(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Organizations(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Products(cmd) => cmd.run(global_options).await?,
                     ApiCommand::SigningKeys(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Users(cmd) => cmd.run(global_options).await?,
-                    ApiCommand::Artifacts(cmd) => cmd.run(global_options).await?,
-                    ApiCommand::Cohorts(cmd) => cmd.run(global_options).await?,
                 }
             }
             CliCommands::Upgrade(cmd) => cmd.run().await?,

@@ -5,6 +5,7 @@ use crate::print_json;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
+use base64::{engine::general_purpose, Engine as _};
 use clap::Parser;
 use peridio_sdk::api::devices::{
     AuthenticateDeviceParams, CreateDeviceParams, DeleteDeviceParams, GetDeviceParams,
@@ -259,7 +260,7 @@ impl Command<AuthenticateCommand> {
         } else {
             self.inner.certificate.unwrap()
         };
-        let encoded_certificate = base64::encode(&certificate);
+        let encoded_certificate = general_purpose::STANDARD.encode(&certificate);
 
         let params = AuthenticateDeviceParams {
             organization_name: global_options.organization_name.unwrap(),
