@@ -794,7 +794,7 @@ dependencies = [
 [[package]]
 name = "peridio-sdk"
 version = "0.1.0"
-source = "git+ssh://git@github.com/peridio/reishi.git?rev=aaef975#aaef9756310c401bc76254561640bb98d7ea97a5"
+source = "git+ssh://git@github.com/peridio/reishi.git?rev=f9def65#f9def657fe188648689dc0e2fabc039bab058162"
 dependencies = [
  "chrono",
  "reqwest",
