@@ -1,5 +1,6 @@
 mod artifact_versions;
 mod artifacts;
+mod bundles;
 mod ca_certificates;
 mod cohorts;
 mod deployments;
@@ -41,6 +42,8 @@ pub enum ApiCommand {
     Artifacts(artifacts::ArtifactsCommand),
     #[command(subcommand)]
     ArtifactVersions(artifact_versions::ArtifactVersionsCommand),
+    #[command(subcommand)]
+    Bundles(bundles::BundlesCommand),
     #[command(subcommand)]
     CaCertificates(ca_certificates::CaCertificatesCommand),
     #[command(subcommand)]
@@ -96,6 +99,7 @@ impl CliCommands {
                 match api {
                     ApiCommand::Artifacts(cmd) => cmd.run(global_options).await?,
                     ApiCommand::ArtifactVersions(cmd) => cmd.run(global_options).await?,
+                    ApiCommand::Bundles(cmd) => cmd.run(global_options).await?,
                     ApiCommand::CaCertificates(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Cohorts(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Deployments(cmd) => cmd.run(global_options).await?,
