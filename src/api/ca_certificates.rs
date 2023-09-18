@@ -1,15 +1,18 @@
-use std::fs;
-use std::path::PathBuf;
-
 use super::Command;
 use crate::{print_json, ApiSnafu, Error, GlobalOptions, NonExistingPathSnafu};
+use base64::{engine::general_purpose, Engine as _};
 use clap::Parser;
-use peridio_sdk::api::ca_certificates::{
-    CreateCaCertificateParams, CreateVerificationCodeParams, DeleteCaCertificateParams,
-    GetCaCertificateParams, ListCaCertificateParams,
-};
-use peridio_sdk::api::{Api, ApiOptions, CaCertificateJitp, UpdateCaCertificateParams};
+use peridio_sdk::api::ca_certificates::CaCertificateJitp;
+use peridio_sdk::api::ca_certificates::CreateCaCertificateParams;
+use peridio_sdk::api::ca_certificates::CreateVerificationCodeParams;
+use peridio_sdk::api::ca_certificates::DeleteCaCertificateParams;
+use peridio_sdk::api::ca_certificates::GetCaCertificateParams;
+use peridio_sdk::api::ca_certificates::ListCaCertificateParams;
+use peridio_sdk::api::ca_certificates::UpdateCaCertificateParams;
+use peridio_sdk::api::{Api, ApiOptions};
 use snafu::ResultExt;
+use std::fs;
+use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
 pub enum CaCertificatesCommand {
@@ -69,8 +72,8 @@ impl Command<CreateCommand> {
                 path: &self.inner.certificate_path,
             })?;
 
-        let cert_base64 = base64::encode(cert);
-        let verification_cert_base64 = base64::encode(verification_cert);
+        let cert_base64 = general_purpose::STANDARD.encode(cert);
+        let verification_cert_base64 = general_purpose::STANDARD.encode(verification_cert);
 
         let jitp = if let (Some(description), true, Some(product_name)) = (
             self.inner.jitp_description,

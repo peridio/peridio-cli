@@ -54,6 +54,13 @@ impl StyledStr {
         // DATAERR
         std::process::exit(65)
     }
+
+    pub fn print_success(&self) -> ! {
+        self.print_err().unwrap();
+
+        // SUCCESS
+        std::process::exit(0)
+    }
 }
 
 pub enum Style {

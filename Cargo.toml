@@ -7,7 +7,7 @@ version = "0.7.2"
 edition = "2021"
 
 [dependencies]
-peridio-sdk = { git = "ssh://git@github.com/peridio/reishi.git", rev = "4f6b21e" }
+peridio-sdk = { git = "ssh://git@github.com/peridio/reishi.git", rev = "84400f2" }
 serde_json = "1.0"
 snafu = "0.7"
 tokio = { version = "1.20.3", features = ["full"] }
@@ -19,7 +19,9 @@ indicatif = "0.17.0"
 futures-util = "0.3.24"
 flate2 = "1.0.24"
 tar = "0.4.38"
-uuid = {version = "1.1.2", features = ["v4", "fast-rng", "macro-diagnostics"]}
-base64 = "0.13.0"
-clap = {version = "4.0.17", features = ["derive", "env"]}
-termcolor = "1.1.3"
+uuid = {version = "1.4.1", features = ["v4", "fast-rng", "macro-diagnostics"]}
+base64 = "0.21.3"
+clap = {version = "4.4.2", features = ["derive", "env"]}
+termcolor = "1.2.0"
+ed25519-dalek  = { version = "2", features = ["pem"] }
+sha2 = "0.10.7"

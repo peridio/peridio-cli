@@ -8,13 +8,13 @@ use peridio_sdk::api::product_users::{
     AddProductUserParams, GetProductUserParams, ListProductUserParams, RemoveProductUserParams,
     UpdateProductUserParams,
 };
+use peridio_sdk::api::products::UpdateProduct;
 use peridio_sdk::api::products::{
     CreateProductParams, DeleteProductParams, GetProductParams, ListProductParams,
     UpdateProductParams,
 };
 use peridio_sdk::api::Api;
 use peridio_sdk::api::ApiOptions;
-use peridio_sdk::api::UpdateProduct;
 use snafu::ResultExt;
 
 #[derive(Parser, Debug)]
