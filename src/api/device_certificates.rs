@@ -1,18 +1,18 @@
-use std::fs;
-
 use super::Command;
 use crate::print_json;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
+use base64::{engine::general_purpose, Engine as _};
 use clap::Parser;
-use peridio_sdk::api::device_certificates::{
-    CreateDeviceCertificateParams, DeleteDeviceCertificateParams, GetDeviceCertificateParams,
-    ListDeviceCertificateParams,
-};
+use peridio_sdk::api::device_certificates::CreateDeviceCertificateParams;
+use peridio_sdk::api::device_certificates::DeleteDeviceCertificateParams;
+use peridio_sdk::api::device_certificates::GetDeviceCertificateParams;
+use peridio_sdk::api::device_certificates::ListDeviceCertificateParams;
 use peridio_sdk::api::Api;
 use peridio_sdk::api::ApiOptions;
 use snafu::ResultExt;
+use std::fs;
 
 #[derive(Parser, Debug)]
 pub enum DeviceCertificatesCommand {
@@ -64,7 +64,7 @@ impl Command<CreateCommand> {
             self.inner.certificate.unwrap()
         };
 
-        let encoded_certificate = base64::encode(&certificate);
+        let encoded_certificate = general_purpose::STANDARD.encode(&certificate);
 
         let params = CreateDeviceCertificateParams {
             organization_name: global_options.organization_name.unwrap(),

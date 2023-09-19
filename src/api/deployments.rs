@@ -6,14 +6,14 @@ use crate::GlobalOptions;
 use clap::Parser;
 use peridio_sdk::api::deployments::CreateDeploymentParams;
 use peridio_sdk::api::deployments::DeleteDeploymentParams;
+use peridio_sdk::api::deployments::DeploymentCondition;
 use peridio_sdk::api::deployments::GetDeploymentParams;
 use peridio_sdk::api::deployments::ListDeploymentParams;
+use peridio_sdk::api::deployments::UpdateDeployment;
+use peridio_sdk::api::deployments::UpdateDeploymentCondition;
 use peridio_sdk::api::deployments::UpdateDeploymentParams;
 use peridio_sdk::api::Api;
 use peridio_sdk::api::ApiOptions;
-use peridio_sdk::api::DeploymentCondition;
-use peridio_sdk::api::UpdateDeployment;
-use peridio_sdk::api::UpdateDeploymentCondition;
 use snafu::ResultExt;
 use uuid::Uuid;
 

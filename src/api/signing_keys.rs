@@ -4,7 +4,10 @@ use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
 use clap::Parser;
-use peridio_sdk::api::signing_keys::{CreateParams, DeleteParams, GetParams, ListParams};
+use peridio_sdk::api::signing_keys::CreateSigningKeyParams;
+use peridio_sdk::api::signing_keys::DeleteSigningKeyParams;
+use peridio_sdk::api::signing_keys::GetSigningKeyParams;
+use peridio_sdk::api::signing_keys::ListSigningKeysParams;
 use peridio_sdk::api::Api;
 use peridio_sdk::api::ApiOptions;
 use snafu::ResultExt;
@@ -31,18 +34,19 @@ impl SigningKeysCommand {
 #[derive(Parser, Debug)]
 pub struct CreateCommand {
     #[arg(long)]
-    key: String,
-
+    value: String,
     #[arg(long)]
     name: String,
+    #[arg(long)]
+    organization_prn: String,
 }
 
 impl Command<CreateCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
-        let params = CreateParams {
-            key: self.inner.key,
+        let params = CreateSigningKeyParams {
+            value: self.inner.value,
             name: self.inner.name,
-            organization_name: global_options.organization_name.unwrap(),
+            organization_prn: self.inner.organization_prn,
         };
 
         let api = Api::new(ApiOptions {
@@ -61,43 +65,15 @@ impl Command<CreateCommand> {
 }
 
 #[derive(Parser, Debug)]
-pub struct DeleteCommand {
-    #[arg(long)]
-    name: String,
-}
-
-impl Command<DeleteCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
-        let params = DeleteParams {
-            name: self.inner.name,
-            organization_name: global_options.organization_name.unwrap(),
-        };
-
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
-
-        if (api.signing_keys().delete(params).await.context(ApiSnafu)?).is_some() {
-            panic!()
-        };
-
-        Ok(())
-    }
-}
-
-#[derive(Parser, Debug)]
 pub struct GetCommand {
     #[arg(long)]
-    name: String,
+    prn: String,
 }
 
 impl Command<GetCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
-        let params = GetParams {
-            name: self.inner.name,
-            organization_name: global_options.organization_name.unwrap(),
+        let params = GetSigningKeyParams {
+            prn: self.inner.prn,
         };
 
         let api = Api::new(ApiOptions {
@@ -116,12 +92,24 @@ impl Command<GetCommand> {
 }
 
 #[derive(Parser, Debug)]
-pub struct ListCommand {}
+pub struct ListCommand {
+    #[arg(long)]
+    pub limit: Option<u8>,
+    #[arg(long)]
+    pub order: Option<String>,
+    #[arg(long)]
+    pub search: String,
+    #[arg(long)]
+    pub page: Option<String>,
+}
 
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
-        let params = ListParams {
-            organization_name: global_options.organization_name.unwrap(),
+        let params = ListSigningKeysParams {
+            limit: self.inner.limit,
+            order: self.inner.order,
+            search: self.inner.search,
+            page: self.inner.page,
         };
 
         let api = Api::new(ApiOptions {
@@ -131,9 +119,35 @@ impl Command<ListCommand> {
         });
 
         match api.signing_keys().list(params).await.context(ApiSnafu)? {
-            Some(signing_keys) => print_json!(&signing_keys),
+            Some(signing_key) => print_json!(&signing_key),
             None => panic!(),
         }
+
+        Ok(())
+    }
+}
+
+#[derive(Parser, Debug)]
+pub struct DeleteCommand {
+    #[arg(long)]
+    signing_key_prn: String,
+}
+
+impl Command<DeleteCommand> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+        let params = DeleteSigningKeyParams {
+            signing_key_prn: self.inner.signing_key_prn,
+        };
+
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
+        });
+
+        if (api.signing_keys().delete(params).await.context(ApiSnafu)?).is_some() {
+            panic!()
+        };
 
         Ok(())
     }

@@ -1,32 +1,44 @@
-use std::{collections::HashMap, fs, path::PathBuf};
+pub(crate) mod config_v1;
+pub(crate) mod config_v2;
 
+use crate::config::config_v2::ConfigV2;
+use crate::config::config_v2::ProfileV2;
+use crate::utils::{Style, StyledStr};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, fs, path::PathBuf};
 
-use crate::utils::{Style, StyledStr};
-
-#[derive(Serialize, Deserialize, Clone)]
-pub struct Config {
-    #[serde(default)]
-    pub api_key: Option<String>,
-
-    pub base_url: Option<String>,
-
-    pub ca_path: Option<String>,
-
-    pub organization_name: Option<String>,
-}
+use self::config_v1::ConfigV1;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct Credential {
     api_key: Option<String>,
 }
 
+pub struct Config;
+
 impl Config {
-    pub fn read_config_file(
-        profile: &Option<String>,
-        config_directory: &Option<String>,
-    ) -> Option<Self> {
+    /// Attempt to fetch a profile by `profile_name` from `config`.
+    pub fn get_profile(
+        config: &ConfigV2,
+        profile_name: &String,
+    ) -> Result<ProfileV2, crate::Error> {
+        match config.profiles.get(profile_name) {
+            Some(profile) => Ok(profile.to_owned()),
+            None => {
+                let mut error = StyledStr::new();
+                error.push_str(Some(Style::Error), "error: ".to_string());
+                error.push_str(None, "Profile ".to_string());
+                error.push_str(None, "'".to_string());
+                error.push_str(Some(Style::Warning), profile_name.to_string());
+                error.push_str(None, "'".to_string());
+                error.push_str(None, " not found.".to_string());
+                error.print_data_err()
+            }
+        }
+    }
+
+    pub fn parse(config_directory: &Option<String>) -> Option<ConfigV2> {
         // get directory
         let mut config_dir_path = if let Some(config_dir) = config_directory {
             let config_dir_path = PathBuf::from(config_dir);
@@ -62,73 +74,29 @@ impl Config {
         config_dir_path.pop();
         config_dir_path.push("config.json");
 
-        let mut config: HashMap<String, Self> = if config_dir_path.exists() {
+        if config_dir_path.exists() {
             let config_file =
                 fs::read_to_string(&config_dir_path).expect("Cannot read config file");
-            serde_json::from_str(&config_file).expect("Cannot read config file")
-        } else if profile.is_some() {
-            let mut error = StyledStr::new();
 
-            error.push_str(Some(Style::Error), "error: ".to_string());
-            error.push_str(None, "Config file not found at ".to_string());
+            if serde_json::from_str::<ConfigV1>(&config_file).is_ok() {
+                let mut error = StyledStr::new();
+                error.push_str(Some(Style::Error), "error: ".to_string());
+                error.push_str(None, "Your current config file is deprecated. Please upgrade your config by running:\r\n".to_string());
+                error.push_str(Some(Style::Success), "\tperidio config upgrade".to_string());
+                error.print_data_err();
+            }
 
-            // pop the config, so we can canonicalize the path since it already exist
-            config_dir_path.pop();
-            error.push_str(None, "'".to_string());
-            error.push_str(
-                Some(Style::Warning),
-                format!(
-                    "{}/{}",
-                    fs::canonicalize(&config_dir_path)
-                        .unwrap()
-                        .to_string_lossy(),
-                    "config.json"
-                ),
-            );
-            error.push_str(None, "'".to_string());
-            error.print_data_err()
-        } else {
-            HashMap::new()
-        };
+            let mut config: ConfigV2 =
+                serde_json::from_str(&config_file).expect("Cannot read config file");
 
-        for (key, config) in config.iter_mut() {
-            if let Some(credential) = credentials.get(key) {
-                if let Some(api_key) = &credential.api_key {
-                    config.api_key = Some(api_key.to_string())
-                } else {
-                    config.api_key = None
+            for (profile_name, profile) in config.profiles.iter_mut() {
+                if let Some(credential) = credentials.get(profile_name) {
+                    profile.api_key = credential.api_key.clone();
                 }
             }
-        }
 
-        // get the profile
-        if let Some(profile) = profile {
-            if let Some(profile) = config.get(profile) {
-                Some(profile.to_owned())
-            } else {
-                let mut error = StyledStr::new();
-
-                error.push_str(Some(Style::Error), "error: ".to_string());
-                error.push_str(None, "Profile ".to_string());
-                error.push_str(None, "'".to_string());
-                error.push_str(Some(Style::Warning), profile.to_string());
-                error.push_str(None, "'".to_string());
-                error.push_str(None, " not found in ".to_string());
-                error.push_str(None, "'".to_string());
-                error.push_str(
-                    Some(Style::Warning),
-                    format!(
-                        "{}",
-                        fs::canonicalize(&config_dir_path)
-                            .unwrap()
-                            .to_string_lossy()
-                    ),
-                );
-                error.push_str(None, "'".to_string());
-                error.print_data_err()
-            }
+            Some(config)
         } else {
-            // otherwise return None
             None
         }
     }

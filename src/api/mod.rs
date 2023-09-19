@@ -1,8 +1,12 @@
 mod artifact_versions;
 mod artifacts;
+mod binaries;
+mod binary_parts;
+mod binary_signatures;
 mod bundles;
 mod ca_certificates;
 mod cohorts;
+mod config;
 mod deployments;
 mod device_certificates;
 mod devices;
@@ -12,12 +16,10 @@ mod products;
 mod signing_keys;
 mod upgrade;
 mod users;
+use crate::utils::Style;
+use crate::utils::StyledStr;
+use crate::GlobalOptions;
 use clap::Parser;
-
-use crate::{
-    utils::{Style, StyledStr},
-    GlobalOptions,
-};
 
 #[derive(Parser, Debug)]
 pub struct Command<T>
@@ -34,6 +36,8 @@ pub enum CliCommands {
     ApiCommand(ApiCommand),
     #[command()]
     Upgrade(upgrade::UpgradeCommand),
+    #[command(subcommand)]
+    Config(config::ConfigCommand),
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -44,6 +48,12 @@ pub enum ApiCommand {
     ArtifactVersions(artifact_versions::ArtifactVersionsCommand),
     #[command(subcommand)]
     Bundles(bundles::BundlesCommand),
+    #[command(subcommand)]
+    Binaries(binaries::BinariesCommand),
+    #[command(subcommand)]
+    BinaryParts(binary_parts::BinaryPartsCommand),
+    #[command(subcommand)]
+    BinarySignatures(binary_signatures::BinarySignaturesCommand),
     #[command(subcommand)]
     CaCertificates(ca_certificates::CaCertificatesCommand),
     #[command(subcommand)]
@@ -100,11 +110,14 @@ impl CliCommands {
                     ApiCommand::Artifacts(cmd) => cmd.run(global_options).await?,
                     ApiCommand::ArtifactVersions(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Bundles(cmd) => cmd.run(global_options).await?,
+                    ApiCommand::Binaries(cmd) => cmd.run(global_options).await?,
+                    ApiCommand::BinaryParts(cmd) => cmd.run(global_options).await?,
+                    ApiCommand::BinarySignatures(cmd) => cmd.run(global_options).await?,
                     ApiCommand::CaCertificates(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Cohorts(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Deployments(cmd) => cmd.run(global_options).await?,
-                    ApiCommand::Devices(cmd) => cmd.run(global_options).await?,
                     ApiCommand::DeviceCertificates(cmd) => cmd.run(global_options).await?,
+                    ApiCommand::Devices(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Firmwares(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Organizations(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Products(cmd) => cmd.run(global_options).await?,
@@ -113,6 +126,7 @@ impl CliCommands {
                 }
             }
             CliCommands::Upgrade(cmd) => cmd.run().await?,
+            CliCommands::Config(cmd) => cmd.run(global_options).await?,
         };
 
         Ok(())
