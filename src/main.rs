@@ -67,7 +67,7 @@ struct Program {
     command: Command,
 }
 
-#[derive(Parser)]
+#[derive(Parser, Clone)]
 pub struct GlobalOptions {
     #[arg(long, env = "PERIDIO_API_KEY", hide_env_values = true, short = 'a')]
     api_key: Option<String>,
