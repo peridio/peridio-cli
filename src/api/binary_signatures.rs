@@ -12,6 +12,7 @@ use ed25519_dalek::pkcs8::DecodePrivateKey;
 use ed25519_dalek::Signer;
 use ed25519_dalek::SigningKey;
 use peridio_sdk::api::binary_signatures::CreateBinarySignatureParams;
+use peridio_sdk::api::binary_signatures::CreateBinarySignatureResponse;
 use peridio_sdk::api::binary_signatures::DeleteBinarySignatureParams;
 use peridio_sdk::api::Api;
 use peridio_sdk::api::ApiOptions;
@@ -41,7 +42,7 @@ pub struct CreateCommand {
         short = 'b',
         help = "The PRN of the binary this signature will be associated with."
     )]
-    binary_prn: String,
+    pub binary_prn: String,
     #[arg(
         long,
         short = 'c',
@@ -49,7 +50,7 @@ pub struct CreateCommand {
         required_unless_present = "signature",
         help = "The path of the file to create a signature for."
     )]
-    binary_content_path: Option<String>,
+    pub binary_content_path: Option<String>,
     #[arg(
         long,
         short = 'g',
@@ -58,7 +59,7 @@ pub struct CreateCommand {
         required_unless_present_any = ["signing_key_private", "binary_content_path"],
         help = "The hex encoded signature of the SHA256 hash of the binary content."
     )]
-    signature: Option<String>,
+    pub signature: Option<String>,
     #[arg(
         long,
         short = 's',
@@ -67,7 +68,7 @@ pub struct CreateCommand {
         required_unless_present_any = ["signing_key_private", "signing_key_prn"],
         help = "The name of a signing key pair as defined in your Peridio CLI config."
     )]
-    signing_key_pair: Option<String>,
+    pub signing_key_pair: Option<String>,
     #[arg(
         long,
         conflicts_with = "signature",
@@ -76,76 +77,74 @@ pub struct CreateCommand {
         requires = "binary_content_path",
         help = "The PEM base64-encoded PKCS #8 private key."
     )]
-    signing_key_private: Option<String>,
+    pub signing_key_private: Option<String>,
     #[arg(
         long,
         conflicts_with = "signing_key_pair",
         required_unless_present = "signing_key_pair",
         help = "The PRN of the signing key to tell Peridio to verify the signature with."
     )]
-    signing_key_prn: Option<String>,
+    pub signing_key_prn: Option<String>,
+
+    #[clap(skip)]
+    pub api: Option<Api>,
 }
 
-impl Command<CreateCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+impl CreateCommand {
+    pub async fn run(
+        self,
+        global_options: GlobalOptions,
+    ) -> Result<Option<CreateBinarySignatureResponse>, Error> {
         // user provides a signing_key_pair
-        let (signing_key_prn, signature) = if let Some(signing_key_pair) =
-            self.inner.signing_key_pair
-        {
+        let (signing_key_prn, signature) = if let Some(signing_key_pair) = self.signing_key_pair {
             if let Some(key_pair) = global_options
                 .signing_key_pairs
                 .unwrap()
                 .get(&signing_key_pair)
             {
                 // first we check for a binary path is provided
-                let signature = if let Some(binary_content_path) = self.inner.binary_content_path {
+                let signature = if let Some(binary_content_path) = self.binary_content_path {
                     Self::sign_binary(
                         key_pair.signing_key_private_path.clone(),
                         binary_content_path,
                     )?
                 } else {
                     // otherwise the user must provide a signature
-                    self.inner.signature.unwrap()
+                    self.signature.unwrap()
                 };
 
                 (key_pair.signing_key_prn.clone(), signature)
             } else {
                 panic!("Incorrect signing_key_pair")
             }
-        } else if let Some(signing_key_private_path) = self.inner.signing_key_private {
-            let binary_content_path = self.inner.binary_content_path.unwrap();
+        } else if let Some(signing_key_private_path) = self.signing_key_private {
+            let binary_content_path = self.binary_content_path.unwrap();
             let signature = Self::sign_binary(signing_key_private_path, binary_content_path)?;
-            (self.inner.signing_key_prn.unwrap(), signature)
+            (self.signing_key_prn.unwrap(), signature)
         } else {
-            (
-                self.inner.signing_key_prn.unwrap(),
-                self.inner.signature.unwrap(),
-            )
+            (self.signing_key_prn.unwrap(), self.signature.unwrap())
         };
 
         let params = CreateBinarySignatureParams {
-            binary_prn: self.inner.binary_prn,
+            binary_prn: self.binary_prn,
             signing_key_prn,
             signature,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = if let Some(api) = self.api {
+            api
+        } else {
+            Api::new(ApiOptions {
+                api_key: global_options.api_key.unwrap(),
+                endpoint: global_options.base_url,
+                ca_bundle_path: global_options.ca_path,
+            })
+        };
 
-        match api
-            .binary_signatures()
+        api.binary_signatures()
             .create(params)
             .await
-            .context(ApiSnafu)?
-        {
-            Some(binary_signature) => print_json!(&binary_signature),
-            None => panic!(),
-        }
-
-        Ok(())
+            .context(ApiSnafu)
     }
 
     fn sign_binary(
@@ -162,11 +161,22 @@ impl Command<CreateCommand> {
         let mut hasher = Sha256::new();
         let _ = io::copy(&mut binary_content, &mut hasher).unwrap();
         let hash = hasher.finalize();
-        let hash = format!("{hash:X}");
+        let hash = format!("{hash:x}");
 
         let signed_hash = signing_key.sign(hash.as_bytes());
 
         Ok(format!("{signed_hash:X}"))
+    }
+}
+
+impl Command<CreateCommand> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+        match self.inner.run(global_options).await? {
+            Some(binary_signature) => print_json!(&binary_signature),
+            None => panic!(),
+        }
+
+        Ok(())
     }
 }
 

@@ -7,7 +7,7 @@ version = "0.7.2"
 edition = "2021"
 
 [dependencies]
-peridio-sdk = { git = "ssh://git@github.com/peridio/reishi.git", rev = "23dc04a" }
+peridio-sdk = { git = "ssh://git@github.com/peridio/reishi.git", rev = "09c767b" }
 serde_json = "1.0"
 snafu = "0.7"
 tokio = { version = "1.20.3", features = ["full"] }
@@ -25,3 +25,5 @@ clap = {version = "4.4.2", features = ["derive", "env"]}
 termcolor = "1.2.0"
 ed25519-dalek  = { version = "2", features = ["pem"] }
 sha2 = "0.10.7"
+backon = "0.4.1"
+console = "0.15.7"
