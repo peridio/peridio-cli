@@ -37,6 +37,7 @@ use std::io::Read;
 use std::io::Seek;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::thread::available_parallelism;
 use std::time::Duration;
 use std::{fs, io};
 
@@ -132,7 +133,7 @@ pub struct CreateCommand {
 
 impl CreateCommand {
     async fn run(
-        &self,
+        &mut self,
         global_options: GlobalOptions,
     ) -> Result<Option<CreateBinaryResponse>, Error> {
         let api = Api::new(ApiOptions {
@@ -145,6 +146,15 @@ impl CreateCommand {
             Some(CreateBinaryResponse { binary }) => {
                 if self.skip_upload {
                     return Ok(Some(CreateBinaryResponse { binary }));
+                }
+
+                if self.concurrency.is_none() {
+                    // default to 2x the core count
+                    self.concurrency = Some(
+                        (available_parallelism().unwrap().get() * 2)
+                            .try_into()
+                            .unwrap(),
+                    );
                 }
 
                 let binary = self.process_binary(&binary, &api, &global_options).await?;
@@ -548,7 +558,7 @@ impl CreateCommand {
 }
 
 impl Command<CreateCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+    async fn run(mut self, global_options: GlobalOptions) -> Result<(), Error> {
         match self.inner.run(global_options).await? {
             Some(binary) => print_json!(&binary),
             None => panic!(),
