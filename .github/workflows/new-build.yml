@@ -15,9 +15,6 @@ jobs:
       CARGO_NET_GIT_FETCH_WITH_CLI: true
     steps:
       - uses: actions/checkout@v3
-      - uses: webfactory/ssh-agent@v0.5.4
-        with:
-          ssh-private-key: ${{ secrets.REISHI_SSH_KEY }}
       - uses: actions/cache@v3
         with:
           path: ~/.cargo/registry
@@ -49,9 +46,6 @@ jobs:
           - os: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: webfactory/ssh-agent@v0.5.4
-        with:
-          ssh-private-key: ${{ secrets.REISHI_SSH_KEY }}
       - uses: actions/cache@v3
         with:
           path: ~/.cargo/registry
@@ -78,9 +72,6 @@ jobs:
       CARGO_NET_GIT_FETCH_WITH_CLI: true
     steps:
       - uses: actions/checkout@v3
-      - uses: webfactory/ssh-agent@v0.5.4
-        with:
-          ssh-private-key: ${{ secrets.REISHI_SSH_KEY }}
       - uses: actions/cache@v3
         with:
           path: ~/.cargo/registry
@@ -109,9 +100,6 @@ jobs:
       CARGO_NET_GIT_FETCH_WITH_CLI: true
     steps:
       - uses: actions/checkout@v3
-      - uses: webfactory/ssh-agent@v0.5.4
-        with:
-          ssh-private-key: ${{ secrets.REISHI_SSH_KEY }}
       - uses: actions/cache@v3
         with:
           path: ~/.cargo/registry
@@ -168,9 +156,6 @@ jobs:
             suffix: .exe
     steps:
       - uses: actions/checkout@v3
-      - uses: webfactory/ssh-agent@v0.5.4
-        with:
-          ssh-private-key: ${{ secrets.REISHI_SSH_KEY }}
       - uses: actions/cache@v3
         with:
           path: ~/.cargo/registry
