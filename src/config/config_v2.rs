@@ -9,6 +9,7 @@ pub type ProfileNameV2 = String;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ProfileV2 {
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub api_key: Option<String>,
     pub base_url: Option<String>,
@@ -78,13 +79,13 @@ impl TryFrom<ConfigV1> for ProfilesV2 {
 
 pub type SigningKeyPairNameV2 = String;
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SigningKeyPairV2 {
     pub signing_key_prn: String,
     pub signing_key_private_path: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Default)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub struct SigningKeyPairsV2(HashMap<SigningKeyPairNameV2, SigningKeyPairV2>);
 
 impl Deref for SigningKeyPairsV2 {

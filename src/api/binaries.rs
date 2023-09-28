@@ -25,6 +25,7 @@ use peridio_sdk::api::binaries::ListBinariesParams;
 use peridio_sdk::api::binaries::ListBinariesResponse;
 use peridio_sdk::api::binaries::UpdateBinaryParams;
 use peridio_sdk::api::binaries::UpdateBinaryResponse;
+use peridio_sdk::api::binary_parts::BinaryPartState;
 use peridio_sdk::api::binary_parts::ListBinaryPart;
 use peridio_sdk::api::Api;
 use peridio_sdk::api::ApiOptions;
@@ -42,7 +43,7 @@ use std::{fs, io};
 
 #[derive(Parser, Debug)]
 pub enum BinariesCommand {
-    Create(Command<CreateCommand>),
+    Create(Box<Command<CreateCommand>>),
     List(Command<ListCommand>),
     Get(Command<GetCommand>),
     Update(Command<UpdateCommand>),
@@ -128,6 +129,9 @@ pub struct CreateCommand {
         conflicts_with = "signing_key_pair"
     )]
     skip_upload: bool,
+
+    #[clap(skip)]
+    global_options: Option<GlobalOptions>,
 }
 
 impl CreateCommand {
@@ -140,6 +144,8 @@ impl CreateCommand {
             endpoint: global_options.base_url.clone(),
             ca_bundle_path: global_options.ca_path.clone(),
         });
+
+        self.global_options = Some(global_options.clone());
 
         let binary = match self.get_or_create_binary(&api).await? {
             Some(CreateBinaryResponse { binary }) => {
@@ -156,7 +162,7 @@ impl CreateCommand {
                     );
                 }
 
-                let binary = self.process_binary(&binary, &api, &global_options).await?;
+                let binary = self.process_binary(&binary, &api).await?;
 
                 Some(CreateBinaryResponse { binary })
             }
@@ -166,83 +172,50 @@ impl CreateCommand {
         Ok(binary)
     }
 
-    async fn process_binary(
-        &self,
-        binary: &Binary,
-        api: &Api,
-        global_options: &GlobalOptions,
-    ) -> Result<Binary, Error> {
+    async fn process_binary(&self, binary: &Binary, api: &Api) -> Result<Binary, Error> {
         if matches!(binary.state, BinaryState::Uploadable) {
-            self.process_binary_parts(binary, api, global_options)
-                .await
-                .unwrap();
-
-            println!("Updating binary to hashable...");
-            // we created the binary parts not move it to hashable
-            let binary = self
-                .change_binary_status(BinaryState::Hashable, binary, api, global_options)
-                .await
-                .unwrap();
-
-            println!("Updating binary to hashing...",);
-            // move to hashing
-            let binary = self
-                .change_binary_status(BinaryState::Hashing, &binary, api, global_options)
-                .await
-                .unwrap();
+            let binary = self.process_binary_parts(binary, api).await.unwrap();
 
             // do signing if available
             if self.signing_key_pair.is_some() || self.signing_key_private.is_some() {
                 // wait for hashing to be signable
-                println!("Waiting for cloud hashing...");
-                let binary = (|| async {
-                    self.check_for_state_change(&binary, api, global_options)
-                        .await
-                })
-                .retry(
-                    &ConstantBuilder::default()
-                        .with_delay(Duration::new(10, 0))
-                        .with_max_times(30),
-                )
-                .await?;
+                eprintln!("Waiting for cloud hashing...");
+                let binary = (|| async { self.check_for_state_change(&binary, api).await })
+                    .retry(
+                        &ConstantBuilder::default()
+                            .with_delay(Duration::new(10, 0))
+                            .with_max_times(30),
+                    )
+                    .await?;
 
-                println!("Signing binary...");
-                let binary = self
-                    .sign_binary(&binary, api, global_options)
-                    .await
-                    .unwrap();
+                eprintln!("Signing binary...");
+                let binary = self.sign_binary(&binary, api).await.unwrap();
 
                 Ok(binary)
             } else {
                 Ok(binary)
             }
         } else if matches!(binary.state, BinaryState::Hashable) {
-            println!("Updating binary to hashing...");
+            eprintln!("Updating binary to hashing...");
             // move to hashing
             let binary = self
-                .change_binary_status(BinaryState::Hashing, binary, api, global_options)
+                .change_binary_status(BinaryState::Hashing, binary, api)
                 .await
                 .unwrap();
 
             if self.signing_key_pair.is_some() || self.signing_key_private.is_some() {
                 // wait for hashing to be signable
-                println!("Waiting for cloud hashing...");
-                let binary = (|| async {
-                    self.check_for_state_change(&binary, api, global_options)
-                        .await
-                })
-                .retry(
-                    &ConstantBuilder::default()
-                        .with_delay(Duration::new(10, 0))
-                        .with_max_times(30),
-                )
-                .await?;
+                eprintln!("Waiting for cloud hashing...");
+                let binary = (|| async { self.check_for_state_change(&binary, api).await })
+                    .retry(
+                        &ConstantBuilder::default()
+                            .with_delay(Duration::new(10, 0))
+                            .with_max_times(30),
+                    )
+                    .await?;
 
-                println!("Signing binary...");
-                let binary = self
-                    .sign_binary(&binary, api, global_options)
-                    .await
-                    .unwrap();
+                eprintln!("Signing binary...");
+                let binary = self.sign_binary(&binary, api).await.unwrap();
 
                 Ok(binary)
             } else {
@@ -251,23 +224,17 @@ impl CreateCommand {
         } else if matches!(binary.state, BinaryState::Hashing) {
             if self.signing_key_pair.is_some() || self.signing_key_private.is_some() {
                 // wait for hashing to be signable
-                println!("Waiting for cloud hashing...");
-                let binary = (|| async {
-                    self.check_for_state_change(binary, api, global_options)
-                        .await
-                })
-                .retry(
-                    &ConstantBuilder::default()
-                        .with_delay(Duration::new(10, 0))
-                        .with_max_times(30),
-                )
-                .await?;
+                eprintln!("Waiting for cloud hashing...");
+                let binary = (|| async { self.check_for_state_change(binary, api).await })
+                    .retry(
+                        &ConstantBuilder::default()
+                            .with_delay(Duration::new(10, 0))
+                            .with_max_times(30),
+                    )
+                    .await?;
 
-                println!("Signing binary...");
-                let binary = self
-                    .sign_binary(&binary, api, global_options)
-                    .await
-                    .unwrap();
+                eprintln!("Signing binary...");
+                let binary = self.sign_binary(&binary, api).await.unwrap();
 
                 Ok(binary)
             } else {
@@ -275,8 +242,8 @@ impl CreateCommand {
             }
         } else if matches!(binary.state, BinaryState::Signable) {
             if self.signing_key_pair.is_some() || self.signing_key_private.is_some() {
-                println!("Signing binary...");
-                let binary = self.sign_binary(binary, api, global_options).await.unwrap();
+                eprintln!("Signing binary...");
+                let binary = self.sign_binary(binary, api).await.unwrap();
 
                 Ok(binary)
             } else {
@@ -287,12 +254,7 @@ impl CreateCommand {
         }
     }
 
-    async fn sign_binary(
-        &self,
-        binary: &Binary,
-        api: &Api,
-        global_options: &GlobalOptions,
-    ) -> Result<Binary, Error> {
+    async fn sign_binary(&self, binary: &Binary, api: &Api) -> Result<Binary, Error> {
         let command = crate::api::binary_signatures::CreateCommand {
             binary_prn: binary.prn.clone(),
             binary_content_path: Some(self.content_path.clone().unwrap()),
@@ -303,10 +265,10 @@ impl CreateCommand {
             api: Some(api.clone()),
         };
 
-        match command.run(global_options.clone()).await? {
+        match command.run(self.global_options.clone().unwrap()).await? {
             Some(_) => {
                 let binary = self
-                    .change_binary_status(BinaryState::Signed, binary, api, global_options)
+                    .change_binary_status(BinaryState::Signed, binary, api)
                     .await
                     .unwrap();
 
@@ -316,18 +278,13 @@ impl CreateCommand {
         }
     }
 
-    async fn check_for_state_change(
-        &self,
-        binary: &Binary,
-        api: &Api,
-        global_options: &GlobalOptions,
-    ) -> Result<Binary, Error> {
+    async fn check_for_state_change(&self, binary: &Binary, api: &Api) -> Result<Binary, Error> {
         let command = GetCommand {
             prn: binary.prn.clone(),
             api: Some(api.to_owned()),
         };
 
-        match command.run(global_options.clone()).await? {
+        match command.run(self.global_options.clone().unwrap()).await? {
             Some(GetBinaryResponse { binary }) => {
                 if matches!(binary.state, BinaryState::Signable) {
                     Ok(binary)
@@ -348,33 +305,26 @@ impl CreateCommand {
         state: BinaryState,
         binary: &Binary,
         api: &Api,
-        global_options: &GlobalOptions,
     ) -> Result<Binary, Error> {
         let command = UpdateCommand {
             prn: binary.prn.clone(),
             description: None,
             state: Some(state),
             api: Some(api.clone()),
+            hash: None,
+            size: None,
         };
 
-        match command.run(global_options.clone()).await? {
+        match command.run(self.global_options.clone().unwrap()).await? {
             Some(UpdateBinaryResponse { binary }) => Ok(binary),
             None => panic!("Cannot update binary state"),
         }
     }
 
-    async fn process_binary_parts(
-        &self,
-        binary: &Binary,
-        api: &Api,
-        global_options: &GlobalOptions,
-    ) -> Result<(), Error> {
-        println!("Evaluating binary parts...");
+    async fn process_binary_parts(&self, binary: &Binary, api: &Api) -> Result<Binary, Error> {
+        eprintln!("Evaluating binary parts...");
         // get server parts
-        let binary_parts = self
-            .get_binary_parts(binary, api, global_options)
-            .await
-            .unwrap();
+        let binary_parts = self.get_binary_parts(binary, api).await.unwrap();
 
         let file_size = {
             let file = fs::File::open(self.content_path.clone().unwrap()).context(
@@ -386,23 +336,82 @@ impl CreateCommand {
             file.metadata().unwrap().len()
         };
 
-        let chucks_length =
+        let chunks_length =
             (file_size as f64 / self.binary_part_size.unwrap() as f64).ceil() as u64;
 
         let client = Client::new();
 
-        println!("Creating binary parts and uploading...");
+        self.upload_binary_parts(
+            binary,
+            api,
+            file_size,
+            chunks_length,
+            &client,
+            &binary_parts,
+        )
+        .await?;
+
+        eprintln!("Validating Upload");
+        // list binary parts again in order to get the latest state
+        let binary_parts = self.get_binary_parts(binary, api).await.unwrap();
+
+        // if the parts are not equal it means we missed a part
+        // if a binary part state is not valid is because something is missing
+        if !(binary_parts.len() == chunks_length as usize
+            && binary_parts
+                .iter()
+                .all(|x| matches!(x.state, BinaryPartState::Valid)))
+        {
+            // retry only once
+            eprintln!("Retrying Upload");
+            self.upload_binary_parts(
+                binary,
+                api,
+                file_size,
+                chunks_length,
+                &client,
+                &binary_parts,
+            )
+            .await?;
+        }
+
+        eprintln!("Updating binary to hashable...");
+        // we created the binary parts not move it to hashable
+        let binary = self
+            .change_binary_status(BinaryState::Hashable, binary, api)
+            .await?;
+
+        eprintln!("Updating binary to hashing...",);
+        // move to hashing
+        let binary = self
+            .change_binary_status(BinaryState::Hashing, &binary, api)
+            .await?;
+
+        Ok(binary)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn upload_binary_parts(
+        &self,
+        binary: &Binary,
+        api: &Api,
+        file_size: u64,
+        chunks_length: u64,
+        client: &Client,
+        binary_parts: &[ListBinaryPart],
+    ) -> Result<(), Error> {
+        eprintln!("Creating binary parts and uploading...");
         let pb = Arc::new(ProgressBar::new(file_size));
         pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
             .unwrap()
             .with_key("eta", |state: &ProgressState, w: &mut dyn std::fmt::Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
             .progress_chars("#>-"));
 
-        let result = stream::iter(1..=chucks_length)
+        let result = stream::iter(1..=chunks_length)
             .map(|index| {
                 let client = client.clone();
                 let binary_part_size = self.binary_part_size.unwrap();
-                let global_options = global_options.clone();
+                let global_options = self.global_options.clone().unwrap();
                 let api = api.clone();
                 let binary = binary.clone();
                 let content_path = self.content_path.clone().unwrap();
@@ -410,9 +419,12 @@ impl CreateCommand {
                 let pb = Arc::clone(&pb);
                 tokio::spawn(async move {
                     // we ignore the ones we already created
-                    if binary_parts.iter().any(|x| x.index as u64 == index) {
-                        pb.inc(chucks_length);
-                        return;
+                    if let Some(binary_part) = binary_parts.iter().find(|x| x.index as u64 == index)
+                    {
+                        if matches!(binary_part.state, BinaryPartState::Valid) {
+                            pb.inc(binary_part.size);
+                            return;
+                        }
                     }
 
                     // we want to open the file in each thread, this is due to concurrency issues
@@ -489,14 +501,16 @@ impl CreateCommand {
         &self,
         binary: &Binary,
         api: &Api,
-        global_options: &GlobalOptions,
     ) -> Result<Vec<ListBinaryPart>, Error> {
         let list_command = crate::api::binary_parts::ListCommand {
             binary_prn: binary.prn.clone(),
             api: Some(api.clone()),
         };
 
-        let binary_parts = match list_command.run(global_options.clone()).await? {
+        let binary_parts = match list_command
+            .run(self.global_options.clone().unwrap())
+            .await?
+        {
             Some(binary_parts) => binary_parts.binary_parts,
             None => Vec::new(),
         };
@@ -509,7 +523,7 @@ impl CreateCommand {
             Self::get_organization_prn_from_prn(self.artifact_version_prn.clone());
 
         let (size, hash) = if let Some(content_path) = &self.content_path {
-            println!("Hashing binary...");
+            eprintln!("Hashing binary...");
             let mut file = fs::File::open(content_path).context(NonExistingPathSnafu {
                 path: &content_path,
             })?;
@@ -523,8 +537,8 @@ impl CreateCommand {
 
         let list_params = ListBinariesParams {
             search: format!(
-                "organization_prn:'{}' and target:'{}' and hash:'{}'",
-                organization_prn, self.target, hash
+                "organization_prn:'{}' and target:'{}'",
+                organization_prn, self.target
             ),
             limit: None,
             order: None,
@@ -537,13 +551,25 @@ impl CreateCommand {
                 next_page: _,
             }) if binaries.len() == 1 => {
                 // we found the binary, do as it was created
-                println!("Binary already exists...");
+                eprintln!("Binary already exists...");
                 let binary = binaries.first().unwrap().clone();
+
+                // is we get a binary, check the hash with out local hash
+                // if mismatch
+                //      reset the state to uploadable
+                //      set hash and size
+                // else just continue
+                let binary = if binary.hash != hash || binary.size != size {
+                    self.reset_binary(&binary, hash, size, api).await?
+                } else {
+                    binary
+                };
+
                 Ok(Some(CreateBinaryResponse { binary }))
             }
 
             _ => {
-                println!("Creating binary...");
+                eprintln!("Creating binary...");
                 // create the binary
                 let params = CreateBinaryParams {
                     artifact_version_prn: self.artifact_version_prn.clone(),
@@ -556,6 +582,38 @@ impl CreateCommand {
                 Ok(api.binaries().create(params).await.context(ApiSnafu)?)
             }
         }
+    }
+
+    async fn reset_binary(
+        &self,
+        binary: &Binary,
+        hash: String,
+        size: u64,
+        api: &Api,
+    ) -> Result<Binary, Error> {
+        let binary = self
+            .change_binary_status(BinaryState::Uploadable, binary, api)
+            .await?;
+
+        let update_command = UpdateCommand {
+            prn: binary.prn.clone(),
+            description: None,
+            hash: Some(hash),
+            size: Some(size),
+            state: None,
+            api: Some(api.clone()),
+        };
+
+        // update hash and size
+        let binary = match update_command
+            .run(self.global_options.clone().unwrap())
+            .await?
+        {
+            Some(UpdateBinaryResponse { binary }) => binary,
+            None => panic!(),
+        };
+
+        Ok(binary)
     }
 
     fn get_organization_prn_from_prn(prn: String) -> String {
@@ -661,6 +719,10 @@ pub struct UpdateCommand {
     pub description: Option<String>,
     #[arg(long, value_parser = BinaryState::from_str)]
     pub state: Option<BinaryState>,
+    #[arg(long)]
+    pub hash: Option<String>,
+    #[arg(long)]
+    pub size: Option<u64>,
 
     #[clap(skip)]
     pub api: Option<Api>,
@@ -675,6 +737,8 @@ impl UpdateCommand {
             prn: self.prn,
             description: self.description,
             state: self.state,
+            hash: self.hash,
+            size: self.size,
         };
 
         let api = if let Some(api) = self.api {
@@ -694,7 +758,7 @@ impl UpdateCommand {
 impl Command<UpdateCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         match self.inner.run(global_options).await? {
-            Some(device) => print_json!(&device),
+            Some(binary) => print_json!(&binary),
             None => panic!(),
         }
 

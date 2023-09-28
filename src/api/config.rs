@@ -62,7 +62,7 @@ impl Command<UpgradeCommand> {
                         .open(&config_dir_path)
                         .unwrap();
                     let mut writer = BufWriter::new(file);
-                    serde_json::to_writer(&mut writer, &configv2).unwrap();
+                    serde_json::to_writer_pretty(&mut writer, &configv2).unwrap();
                     writer.flush().unwrap();
 
                     let mut msg = StyledStr::new();

@@ -3,6 +3,8 @@ use std::io;
 
 use super::Command;
 use crate::print_json;
+use crate::utils::Style;
+use crate::utils::StyledStr;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
@@ -115,7 +117,14 @@ impl CreateCommand {
 
                 (key_pair.signing_key_prn.clone(), signature)
             } else {
-                panic!("Incorrect signing_key_pair")
+                let mut error = StyledStr::new();
+                error.push_str(Some(Style::Error), "error: ".to_string());
+                error.push_str(None, "Signing Key ".to_string());
+                error.push_str(None, "'".to_string());
+                error.push_str(Some(Style::Warning), signing_key_pair.to_string());
+                error.push_str(None, "'".to_string());
+                error.push_str(None, " not found.".to_string());
+                error.print_data_err()
             }
         } else if let Some(signing_key_private_path) = self.signing_key_private {
             let binary_content_path = self.binary_content_path.unwrap();
