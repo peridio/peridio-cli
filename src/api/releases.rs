@@ -53,6 +53,10 @@ pub struct CreateCommand {
     required: bool,
     #[arg(long)]
     schedule_date: String,
+    #[arg(long)]
+    version: Option<String>,
+    #[arg(long)]
+    version_requirement: Option<String>,
 }
 
 impl Command<CreateCommand> {
@@ -68,6 +72,8 @@ impl Command<CreateCommand> {
             schedule_date: self.inner.schedule_date,
             next_release_prn: self.inner.next_release_prn,
             previous_release_prn: self.inner.previous_release_prn,
+            version: self.inner.version,
+            version_requirement: self.inner.version_requirement,
         };
 
         let api = Api::new(ApiOptions {
@@ -167,6 +173,12 @@ pub struct UpdateCommand {
 
     #[arg(long)]
     pub schedule_date: Option<String>,
+
+    #[arg(long)]
+    version: Option<String>,
+
+    #[arg(long)]
+    version_requirement: Option<String>,
 }
 
 impl Command<UpdateCommand> {
@@ -178,6 +190,8 @@ impl Command<UpdateCommand> {
             phase_value: self.inner.phase_value,
             required: self.inner.required,
             schedule_date: self.inner.schedule_date,
+            version: self.inner.version,
+            version_requirement: self.inner.version_requirement,
         };
 
         let api = Api::new(ApiOptions {
