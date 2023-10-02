@@ -70,6 +70,8 @@ impl Command<UpgradeCommand> {
                     msg.push_str(None, "The config file has been migrated to v2.".to_string());
                     msg.print_success();
                 }
+            } else if serde_json::from_str::<ConfigV2>(&config_file).is_ok() {
+                eprintln!("Your config is up to date!");
             } else {
                 panic!("Your current config file can't be upgraded automatically.");
             }
