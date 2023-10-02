@@ -9,7 +9,7 @@ fn main() {
         .unwrap();
     let git_hash = String::from_utf8(output.stdout).unwrap();
     println!(
-        "cargo:rustc-env=MOREL_VERSION={} {}",
+        "cargo:rustc-env=PERIDIO_CLI_VERSION={} {}",
         env!("CARGO_PKG_VERSION"),
         git_hash
     );

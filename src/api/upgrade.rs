@@ -163,15 +163,15 @@ impl UpgradeCommand {
     async fn get_release_info(version: Option<String>) -> Result<GithubResponse, reqwest::Error> {
         let client = ClientBuilder::new().use_rustls_tls().build()?;
         let url = if let Some(version) = version {
-            format!("https://api.github.com/repos/peridio/morel/releases/tags/{version}")
+            format!("https://api.github.com/repos/peridio/peridio-cli/releases/tags/{version}")
         } else {
-            "https://api.github.com/repos/peridio/morel/releases/latest".to_owned()
+            "https://api.github.com/repos/peridio/peridio-cli/releases/latest".to_owned()
         };
 
         client
             .get(url)
             .header("Accept", "application/vnd.github+json")
-            .header("User-Agent", "peridio/morel")
+            .header("User-Agent", "peridio/peridio-cli")
             .send()
             .await?
             .json::<GithubResponse>()

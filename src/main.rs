@@ -58,7 +58,7 @@ impl fmt::Debug for Error {
 }
 
 #[derive(Parser)]
-#[command(name = "peridio", version = env!("MOREL_VERSION"))]
+#[command(name = "peridio", version = env!("PERIDIO_CLI_VERSION"))]
 struct Program {
     #[command(flatten)]
     global_options: GlobalOptions,
