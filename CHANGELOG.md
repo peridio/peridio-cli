@@ -2,6 +2,12 @@
 
 Peridio CLI 0.10 adds support for creating versioned releases.
 
+## 0.10.1
+
+### Fixes
+
+- Fixes crash when handling a cohort's latest release.
+
 ## 0.10.0
 
 ### Features
