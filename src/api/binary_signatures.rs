@@ -90,6 +90,9 @@ pub struct CreateCommand {
 
     #[clap(skip)]
     pub api: Option<Api>,
+
+    #[clap(skip)]
+    pub binary_content_hash: Option<String>,
 }
 
 impl CreateCommand {
@@ -109,6 +112,7 @@ impl CreateCommand {
                     Self::sign_binary(
                         key_pair.signing_key_private_path.clone(),
                         binary_content_path,
+                        self.binary_content_hash.clone(),
                     )?
                 } else {
                     // otherwise the user must provide a signature
@@ -128,7 +132,11 @@ impl CreateCommand {
             }
         } else if let Some(signing_key_private_path) = self.signing_key_private {
             let binary_content_path = self.binary_content_path.unwrap();
-            let signature = Self::sign_binary(signing_key_private_path, binary_content_path)?;
+            let signature = Self::sign_binary(
+                signing_key_private_path,
+                binary_content_path,
+                self.binary_content_hash.clone(),
+            )?;
             (self.signing_key_prn.unwrap(), signature)
         } else {
             (self.signing_key_prn.unwrap(), self.signature.unwrap())
@@ -159,6 +167,7 @@ impl CreateCommand {
     fn sign_binary(
         signing_key_private_path: String,
         binary_content_path: String,
+        binary_content_hash: Option<String>,
     ) -> Result<String, Error> {
         let signing_key_private =
             fs::read_to_string(&signing_key_private_path).context(NonExistingPathSnafu {
@@ -166,11 +175,15 @@ impl CreateCommand {
             })?;
         let signing_key: SigningKey = SigningKey::from_pkcs8_pem(&signing_key_private).unwrap();
 
-        let mut binary_content = fs::File::open(binary_content_path).unwrap();
-        let mut hasher = Sha256::new();
-        let _ = io::copy(&mut binary_content, &mut hasher).unwrap();
-        let hash = hasher.finalize();
-        let hash = format!("{hash:x}");
+        let hash = if let Some(hash) = binary_content_hash {
+            hash
+        } else {
+            let mut binary_content = fs::File::open(binary_content_path).unwrap();
+            let mut hasher = Sha256::new();
+            let _ = io::copy(&mut binary_content, &mut hasher).unwrap();
+            let hash = hasher.finalize();
+            format!("{hash:x}")
+        };
 
         let signed_hash = signing_key.sign(hash.as_bytes());
 

@@ -60,6 +60,9 @@ pub struct CreateCommand {
 
     #[arg(long)]
     target: Option<String>,
+
+    #[arg(long)]
+    cohort_prn: Option<String>,
 }
 
 impl Command<CreateCommand> {
@@ -73,6 +76,7 @@ impl Command<CreateCommand> {
             last_communication: self.inner.last_communication,
             tags: self.inner.tags,
             target: self.inner.target,
+            cohort_prn: self.inner.cohort_prn,
         };
 
         let api = Api::new(ApiOptions {

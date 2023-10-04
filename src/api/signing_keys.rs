@@ -1,9 +1,16 @@
+use std::fs;
+
 use super::Command;
 use crate::print_json;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
+use crate::NonExistingPathSnafu;
+use base64::engine::general_purpose;
+use base64::Engine;
 use clap::Parser;
+use ed25519_dalek::pkcs8::DecodePublicKey;
+use ed25519_dalek::VerifyingKey;
 use peridio_sdk::api::signing_keys::CreateSigningKeyParams;
 use peridio_sdk::api::signing_keys::DeleteSigningKeyParams;
 use peridio_sdk::api::signing_keys::GetSigningKeyParams;
@@ -33,18 +40,60 @@ impl SigningKeysCommand {
 
 #[derive(Parser, Debug)]
 pub struct CreateCommand {
-    #[arg(long)]
-    value: String,
+    #[arg(
+        long,
+        conflicts_with = "key",
+        conflicts_with = "path",
+        required_unless_present = "key",
+        required_unless_present = "path"
+    )]
+    value: Option<String>,
     #[arg(long)]
     name: String,
     #[arg(long)]
     organization_prn: String,
+    #[arg(
+        long,
+        conflicts_with = "value",
+        conflicts_with = "path",
+        required_unless_present = "value",
+        required_unless_present = "path",
+        help = "The path to the public key raw file."
+    )]
+    key: Option<String>,
+    #[arg(
+        long,
+        conflicts_with = "key",
+        conflicts_with = "value",
+        required_unless_present = "key",
+        required_unless_present = "value",
+        help = "The path to the public key pem file."
+    )]
+    path: Option<String>,
 }
 
 impl Command<CreateCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+        let value = if let Some(path) = self.inner.path {
+            let verifying_key_pub =
+                fs::read_to_string(&path).context(NonExistingPathSnafu { path: &path })?;
+            let verifying_key = VerifyingKey::from_public_key_pem(&verifying_key_pub)
+                .expect("invalid public key PEM");
+
+            let raw_bytes = verifying_key.as_bytes();
+
+            general_purpose::STANDARD.encode(raw_bytes)
+        } else if let Some(key) = self.inner.key {
+            fs::read_to_string(&key)
+                .context(NonExistingPathSnafu { path: &key })?
+                .trim()
+                .to_owned()
+        } else {
+            self.inner.value.unwrap()
+        };
+
         let params = CreateSigningKeyParams {
-            value: self.inner.value,
+            value,
             name: self.inner.name,
             organization_prn: self.inner.organization_prn,
         };
