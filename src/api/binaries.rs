@@ -263,6 +263,7 @@ impl CreateCommand {
             signing_key_private: self.signing_key_private.clone(),
             signing_key_prn: self.signing_key_prn.clone(),
             api: Some(api.clone()),
+            binary_content_hash: Some(binary.hash.clone()),
         };
 
         match command.run(self.global_options.clone().unwrap()).await? {
