@@ -906,7 +906,7 @@ dependencies = [
 [[package]]
 name = "peridio-sdk"
 version = "0.1.0"
-source = "git+https://github.com/peridio/peridio-rust.git?rev=9231b4b#9231b4bc7e2fac96532e15476b591bc90c61cfd0"
+source = "git+https://github.com/peridio/peridio-rust.git?rev=b9981c1#b9981c1ba276a83efb24480740bc95bb074796d5"
 dependencies = [
  "chrono",
  "reqwest",
