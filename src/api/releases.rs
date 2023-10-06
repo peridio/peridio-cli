@@ -166,6 +166,9 @@ pub struct UpdateCommand {
     pub name: Option<String>,
 
     #[arg(long)]
+    pub next_release_prn: Option<String>,
+
+    #[arg(long)]
     pub phase_value: Option<f64>,
 
     #[arg(long)]
@@ -187,6 +190,7 @@ impl Command<UpdateCommand> {
             prn: self.inner.prn,
             description: self.inner.description,
             name: self.inner.name,
+            next_release_prn: self.inner.next_release_prn,
             phase_value: self.inner.phase_value,
             required: self.inner.required,
             schedule_date: self.inner.schedule_date,
