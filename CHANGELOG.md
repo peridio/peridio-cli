@@ -1,17 +1,16 @@
-# Changelog for Peridio 0.10
+# Changelog for Peridio 0.11
 
-Peridio CLI 0.10 adds support for creating versioned releases.
+Peridio CLI 0.11 adds support for updating `next_release_prn` on releases.
 
-## 0.10.1
 
-### Fixes
-
-- Fixes crash when handling a cohort's latest release.
-
-## 0.10.0
+## 0.11.0
 
 ### Features
 
-- Add options to `peridio releases [create|update]`:
-  - `version`
-  - `version_requirement`
+- Add options to `peridio releases update`:
+  - `next_release_prn`
+
+### Fixes
+
+- Now avoids file hash recalculations when doing `peridio binaries create`
+
