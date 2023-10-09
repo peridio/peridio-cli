@@ -168,7 +168,7 @@ async fn main() {
     if let Err(e) = Program::parse().run().await {
         match e {
             Error::Api { source } => {
-                eprintln!("{source}")
+                println!("{source}")
             }
 
             Error::NonExistingPath { path, source: _ } => {
