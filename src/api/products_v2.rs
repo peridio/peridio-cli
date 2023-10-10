@@ -5,7 +5,6 @@ use crate::Error;
 use crate::GlobalOptions;
 use clap::Parser;
 use peridio_sdk::api::products_v2::CreateProductV2Params;
-use peridio_sdk::api::products_v2::DeleteProductV2Params;
 use peridio_sdk::api::products_v2::GetProductV2Params;
 use peridio_sdk::api::products_v2::ListProductsV2Params;
 use peridio_sdk::api::products_v2::UpdateProductV2Params;
@@ -16,7 +15,6 @@ use snafu::ResultExt;
 #[derive(Parser, Debug)]
 pub enum ProductsV2Command {
     Create(Command<CreateCommand>),
-    Delete(Command<DeleteCommand>),
     List(Command<ListCommand>),
     Get(Command<GetCommand>),
     Update(Command<UpdateCommand>),
@@ -26,7 +24,6 @@ impl ProductsV2Command {
     pub async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         match self {
             Self::Create(cmd) => cmd.run(global_options).await,
-            Self::Delete(cmd) => cmd.run(global_options).await,
             Self::List(cmd) => cmd.run(global_options).await,
             Self::Get(cmd) => cmd.run(global_options).await,
             Self::Update(cmd) => cmd.run(global_options).await,
@@ -38,6 +35,9 @@ impl ProductsV2Command {
 
 pub struct CreateCommand {
     #[arg(long)]
+    archived: Option<bool>,
+
+    #[arg(long)]
     name: String,
 
     #[arg(long)]
@@ -47,6 +47,7 @@ pub struct CreateCommand {
 impl Command<CreateCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = CreateProductV2Params {
+            archived: self.inner.archived,
             name: self.inner.name,
             organization_prn: self.inner.organization_prn,
         };
@@ -134,7 +135,9 @@ pub struct UpdateCommand {
     #[arg(long)]
     prn: String,
     #[arg(long)]
-    pub name: Option<String>,
+    name: Option<String>,
+    #[arg(long)]
+    archived: Option<bool>,
 }
 
 impl Command<UpdateCommand> {
@@ -142,6 +145,7 @@ impl Command<UpdateCommand> {
         let params = UpdateProductV2Params {
             prn: self.inner.prn,
             name: self.inner.name,
+            archived: self.inner.archived,
         };
 
         let api = Api::new(ApiOptions {
@@ -154,32 +158,6 @@ impl Command<UpdateCommand> {
             Some(device) => print_json!(&device),
             None => panic!(),
         }
-
-        Ok(())
-    }
-}
-
-#[derive(Parser, Debug)]
-pub struct DeleteCommand {
-    #[arg(long)]
-    product_prn: String,
-}
-
-impl Command<DeleteCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
-        let params = DeleteProductV2Params {
-            product_prn: self.inner.product_prn,
-        };
-
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
-
-        if (api.products_v2().delete(params).await.context(ApiSnafu)?).is_some() {
-            panic!()
-        };
 
         Ok(())
     }
