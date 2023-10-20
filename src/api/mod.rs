@@ -18,6 +18,7 @@ mod releases;
 mod signing_keys;
 mod upgrade;
 mod users;
+mod webhooks;
 use crate::utils::Style;
 use crate::utils::StyledStr;
 use crate::GlobalOptions;
@@ -80,6 +81,8 @@ pub enum ApiCommand {
     SigningKeys(signing_keys::SigningKeysCommand),
     #[command(subcommand)]
     Users(users::UsersCommand),
+    #[command(subcommand)]
+    Webhooks(webhooks::WebhooksCommand),
 }
 
 impl CliCommands {
@@ -131,6 +134,7 @@ impl CliCommands {
                     ApiCommand::Releases(cmd) => cmd.run(global_options).await?,
                     ApiCommand::SigningKeys(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Users(cmd) => cmd.run(global_options).await?,
+                    ApiCommand::Webhooks(cmd) => cmd.run(global_options).await?,
                 }
             }
             CliCommands::Upgrade(cmd) => cmd.run().await?,
