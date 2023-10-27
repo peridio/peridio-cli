@@ -5,6 +5,7 @@ use crate::Error;
 use crate::GlobalOptions;
 use clap::Parser;
 use peridio_sdk::api::webhooks::CreateWebhookParams;
+use peridio_sdk::api::webhooks::DeleteWebhookParams;
 use peridio_sdk::api::webhooks::GetWebhookParams;
 use peridio_sdk::api::webhooks::ListWebhooksParams;
 use peridio_sdk::api::webhooks::RollSecretWebhookParams;
@@ -17,6 +18,7 @@ use snafu::ResultExt;
 #[derive(Parser, Debug)]
 pub enum WebhooksCommand {
     Create(Command<CreateCommand>),
+    Delete(Command<DeleteCommand>),
     Get(Command<GetCommand>),
     List(Command<ListCommand>),
     RollSecret(Command<RollSecretCommand>),
@@ -28,6 +30,7 @@ impl WebhooksCommand {
     pub async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         match self {
             Self::Create(cmd) => cmd.run(global_options).await,
+            Self::Delete(cmd) => cmd.run(global_options).await,
             Self::Get(cmd) => cmd.run(global_options).await,
             Self::List(cmd) => cmd.run(global_options).await,
             Self::RollSecret(cmd) => cmd.run(global_options).await,
@@ -225,6 +228,32 @@ impl Command<UpdateCommand> {
             Some(device) => print_json!(&device),
             None => panic!(),
         }
+
+        Ok(())
+    }
+}
+
+#[derive(Parser, Debug)]
+pub struct DeleteCommand {
+    #[arg(long)]
+    webhook_prn: String,
+}
+
+impl Command<DeleteCommand> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+        let params = DeleteWebhookParams {
+            webhook_prn: self.inner.webhook_prn,
+        };
+
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
+        });
+
+        if (api.webhooks().delete(params).await.context(ApiSnafu)?).is_some() {
+            panic!()
+        };
 
         Ok(())
     }
