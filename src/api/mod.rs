@@ -11,6 +11,7 @@ mod deployments;
 mod device_certificates;
 mod devices;
 mod firmwares;
+mod list;
 mod organization;
 mod products;
 mod products_v2;

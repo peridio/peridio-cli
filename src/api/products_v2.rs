@@ -1,4 +1,5 @@
 use super::Command;
+use crate::api::list::ListArgs;
 use crate::print_json;
 use crate::ApiSnafu;
 use crate::Error;
@@ -69,23 +70,17 @@ impl Command<CreateCommand> {
 
 #[derive(Parser, Debug)]
 pub struct ListCommand {
-    #[arg(long)]
-    pub limit: Option<u8>,
-    #[arg(long)]
-    pub order: Option<String>,
-    #[arg(long)]
-    pub search: String,
-    #[arg(long)]
-    pub page: Option<String>,
+    #[clap(flatten)]
+    list_args: ListArgs,
 }
 
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListProductsV2Params {
-            limit: self.inner.limit,
-            order: self.inner.order,
-            search: self.inner.search,
-            page: self.inner.page,
+            limit: self.inner.list_args.limit,
+            order: self.inner.list_args.order,
+            search: self.inner.list_args.search,
+            page: self.inner.list_args.page,
         };
 
         let api = Api::new(ApiOptions {
