@@ -539,8 +539,8 @@ impl CreateCommand {
 
         let list_params = ListBinariesParams {
             search: format!(
-                "organization_prn:'{}' and target:'{}'",
-                organization_prn, self.target
+                "organization_prn:'{}' and target:'{}' and artifact_version_prn:'{}'",
+                organization_prn, self.target, self.artifact_version_prn
             ),
             limit: None,
             order: None,
