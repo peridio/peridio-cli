@@ -264,7 +264,7 @@ impl CreateCommand {
             signing_key_private: self.signing_key_private.clone(),
             signing_key_prn: self.signing_key_prn.clone(),
             api: Some(api.clone()),
-            binary_content_hash: Some(binary.hash.clone()),
+            binary_content_hash: binary.hash.clone(),
         };
 
         match command.run(self.global_options.clone().unwrap()).await? {
@@ -453,7 +453,7 @@ impl CreateCommand {
                         // push those bytes to the server
                         let create_command = crate::api::binary_parts::CreateCommand {
                             binary_prn: binary.prn.clone(),
-                            expected_binary_size: Some(binary.size),
+                            expected_binary_size: binary.size,
                             index: index as u16,
                             hash: format!("{hash:x}"),
                             api: Some(api),
@@ -561,7 +561,7 @@ impl CreateCommand {
                 //      reset the state to uploadable
                 //      set hash and size
                 // else just continue
-                let binary = if binary.hash != hash || binary.size != size {
+                let binary = if binary.hash != Some(hash.clone()) || binary.size != Some(size) {
                     self.reset_binary(&binary, hash, size, api).await?
                 } else {
                     binary
