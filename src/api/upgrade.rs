@@ -31,6 +31,9 @@ struct GithubResponse {
 
 #[derive(Parser, Debug)]
 pub struct UpgradeCommand {
+    /// Controls what version to upgrade to.
+    ///
+    /// If not specified, the latest version will be used.
     #[arg(long)]
     version: Option<String>,
 }

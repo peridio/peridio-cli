@@ -40,21 +40,27 @@ impl DeploymentsCommand {
 
 #[derive(Parser, Debug)]
 pub struct CreateCommand {
+    /// Whether or not the deployment will leverage Peridio-managed delta updates.
     #[arg(long)]
     delta_updatable: bool,
 
+    /// The UUID of the firmware to deploy.
     #[arg(long)]
     firmware: Uuid,
 
+    /// The name of the product you wish to create the resource within.
     #[arg(long)]
     product_name: String,
 
+    /// The resource's name, meant to be displayable to users.
     #[arg(long)]
     name: String,
 
+    /// A list of tags that must be present on a device for it to be eligible for this deployment.
     #[arg(long, required = true)]
     tags: Vec<String>,
 
+    /// A SemVer requirement that must be satisfied by a device's version for the device to be eligible for this deployment.
     #[arg(long)]
     version: Option<String>,
 }
@@ -91,9 +97,11 @@ impl Command<CreateCommand> {
 
 #[derive(Parser, Debug)]
 pub struct DeleteCommand {
+    /// The name of the deployment to delete.
     #[arg(long)]
     deployment_name: String,
 
+    /// The name of the product the deployment belongs to.
     #[arg(long)]
     product_name: String,
 }
@@ -122,9 +130,11 @@ impl Command<DeleteCommand> {
 
 #[derive(Parser, Debug)]
 pub struct GetCommand {
+    /// The name of deployment to get.
     #[arg(long)]
     deployment_name: String,
 
+    /// The name of the product the deployment belongs to.
     #[arg(long)]
     product_name: String,
 }
@@ -154,6 +164,7 @@ impl Command<GetCommand> {
 
 #[derive(Parser, Debug)]
 pub struct ListCommand {
+    /// The name of the product to list deployments for.
     #[arg(long)]
     product_name: String,
 }
@@ -182,27 +193,35 @@ impl Command<ListCommand> {
 
 #[derive(Parser, Debug)]
 pub struct UpdateCommand {
+    /// Whether or not the deployment will leverage Peridio-managed delta updates.
     #[arg(long)]
     delta_updatable: Option<bool>,
 
+    /// The name of the deployment (currently) to update.
     #[arg(long)]
     deployment_name: String,
 
+    /// The UUID of the firmware to deploy.
     #[arg(long)]
     firmware: Option<Uuid>,
 
+    /// Whether or not the deployment is active.
     #[arg(long)]
     is_active: Option<bool>,
 
+    /// The name of the product you wish to create the resource within.
     #[arg(long)]
     product_name: String,
 
+    /// The resource's name, meant to be displayable to users.
     #[arg(long)]
     name: Option<String>,
 
+    /// A list of tags that must be present on a device for it to be eligible for this deployment.
     #[arg(long)]
     tags: Option<Vec<String>>,
 
+    /// A SemVer requirement that must be satisfied by a device's version for the device to be eligible for this deployment.
     #[arg(long)]
     version: Option<String>,
 }

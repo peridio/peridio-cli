@@ -39,24 +39,31 @@ impl CaCertificatesCommand {
 
 #[derive(Parser, Debug)]
 pub struct CreateCommand {
+    /// The path of the CA certificate to create.
     #[arg(long, short = 'c')]
     certificate_path: PathBuf,
 
+    /// The path of the verification certificate.
     #[arg(long, short = 'v')]
     verification_certificate_path: PathBuf,
 
+    /// An arbitrary string attached to the resource. Often useful for displaying to users.
     #[arg(long)]
     description: Option<String>,
 
+    /// An arbitrary string attached to the jitp resource. Often useful for displaying to users.
     #[arg(long, requires_all = &["jitp_tags", "jitp_product_name"])]
     jitp_description: Option<String>,
 
+    /// Tags that will be automatically applied to devices that JITP with this CA certificate.
     #[arg(long, requires_all = &["jitp_description", "jitp_product_name"])]
     jitp_tags: Vec<String>,
 
+    /// The product that will be automatically applied to devices that JITP with this CA certificate.
     #[arg(long, requires_all = &["jitp_tags", "jitp_description"])]
     jitp_product_name: Option<String>,
 
+    /// The cohort that will be automatically applied to devices that JITP with this CA certificate.
     #[arg(long)]
     jitp_cohort_prn: Option<String>,
 }
@@ -120,6 +127,7 @@ impl Command<CreateCommand> {
 
 #[derive(Parser, Debug)]
 pub struct DeleteCommand {
+    /// The serial of the CA certificate to delete.
     #[arg(long)]
     ca_certificate_serial: String,
 }
@@ -205,24 +213,31 @@ impl Command<ListCommand> {
 
 #[derive(Parser, Debug)]
 pub struct UpdateCommand {
+    /// The serial of the CA certificate to update.
     #[arg(long)]
     ca_certificate_serial: String,
 
+    /// An arbitrary string attached to the resource. Often useful for displaying to users.
     #[arg(long)]
     description: Option<String>,
 
+    /// Pass this option to disable JITP for this CA certificate.
     #[arg(long, conflicts_with_all = &["jitp_description", "jitp_tags", "jitp_product_name"])]
     disable_jitp: bool,
 
+    /// An arbitrary string attached to the jitp resource. Often useful for displaying to users.
     #[arg(long, requires_all = &["jitp_tags", "jitp_product_name"])]
     jitp_description: Option<String>,
 
+    /// Tags that will be automatically applied to devices that JITP with this CA certificate.
     #[arg(long, requires_all = &["jitp_description", "jitp_product_name"])]
     jitp_tags: Vec<String>,
 
+    /// The product that will be automatically applied to devices that JITP with this CA certificate.
     #[arg(long, requires_all = &["jitp_tags", "jitp_description"])]
     jitp_product_name: Option<String>,
 
+    /// The cohort that will be automatically applied to devices that JITP with this CA certificate.
     #[arg(long)]
     jitp_cohort_prn: Option<String>,
 }
@@ -275,6 +290,9 @@ impl Command<UpdateCommand> {
     }
 }
 
+/// Create a verification code for use in creating a CA certificate.
+///
+/// This command is used to create a verification code that can be used to create a CA certificate.
 #[derive(Parser, Debug)]
 pub struct CreateVerificationCodeCommand {}
 

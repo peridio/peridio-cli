@@ -10,7 +10,6 @@ use backon::Retryable;
 use base64::engine::general_purpose;
 use base64::Engine;
 use clap::Parser;
-
 use futures_util::stream;
 use futures_util::StreamExt;
 use indicatif::ProgressBar;
@@ -36,7 +35,6 @@ use sha2::{Digest, Sha256};
 use snafu::ResultExt;
 use std::io::Read;
 use std::io::Seek;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::thread::available_parallelism;
 use std::time::Duration;
@@ -61,67 +59,78 @@ impl BinariesCommand {
     }
 }
 
+/// Idempotently create, upload in parallel, and sign a binary.
+///
+/// This command idempotently: creates a binary record, uploads its content in parallel via binary parts, and creates a binary signature.
 #[derive(Parser, Debug)]
-
 pub struct CreateCommand {
+    /// The PRN of the artifact version you wish to create a binary for.
     #[arg(long)]
     artifact_version_prn: String,
+    /// An arbitrary string attached to the resource. Often useful for displaying to users.
     #[arg(long)]
     description: Option<String>,
+    /// The base64 encoding of the SHA256 hash of the binary's content.
     #[arg(
         long,
         conflicts_with = "content_path",
         required_unless_present = "content_path"
     )]
     hash: Option<String>,
+    /// The expected size in bytes of the binary.
     #[arg(
         long,
         conflicts_with = "content_path",
         required_unless_present = "content_path"
     )]
     size: Option<u64>,
+    /// An arbitrary string attached to the resource. Often a target triplet to indicate compatibility.
     #[arg(long)]
     target: String,
+    /// The path to the file you wish to upload as the binary's content.
     #[arg(
         long,
         conflicts_with_all = ["hash", "size"],
-        required_unless_present_any = ["hash", "size"]
+        required_unless_present_any = ["hash", "size"],
     )]
     content_path: Option<String>,
+    /// The size to use when creating binary parts. All binary parts will be equal to this size, except the last one which will be less than or equal to this size.
     #[arg(
         long,
         requires = "content_path",
         default_value = "5242880",
-        value_parser = clap::value_parser!(u64).range(5242880..50000000000)
+        value_parser = clap::value_parser!(u64).range(5242880..50000000000),
     )]
     binary_part_size: Option<u64>,
+    /// Limit the concurrency of jobs that create and upload binary parts. [default: 2x the core count]
     #[arg(long, requires = "content_path")]
     concurrency: Option<u8>,
+    /// The name of a signing key pair in your Peridio CLI config. This will dictate both the private key to create a binary signature with as well as the signing key Peridio will use to verify the binary signature.
     #[arg(
         long,
         short = 's',
         conflicts_with = "signing_key_private",
         conflicts_with = "signing_key_prn",
         required_unless_present_any = ["signing_key_private", "signing_key_prn"],
-        help = "The name of a signing key pair as defined in your Peridio CLI config."
     )]
     signing_key_pair: Option<String>,
+    /// A path to a PKCS#8 private key encoded as a pem to create a binary signature binary with.
     #[arg(
         long,
         conflicts_with = "signing_key_pair",
         required_unless_present = "signing_key_pair",
-        requires = "signing_key_prn",
-        help = "The PEM base64-encoded PKCS #8 private key."
+        requires = "signing_key_prn"
     )]
     signing_key_private: Option<String>,
+    /// The PRN of the signing key Peridio will use to verify the binary signature.
     #[arg(
         long,
         conflicts_with = "signing_key_pair",
         required_unless_present = "signing_key_pair",
-        requires = "signing_key_private",
-        help = "The PRN of the signing key to tell Peridio to verify the signature with."
+        requires = "signing_key_private"
     )]
     signing_key_prn: Option<String>,
+    /// Create the binary record but do not upload its content nor sign it.
     #[arg(
         long,
         default_value = "false",
@@ -200,7 +209,7 @@ impl CreateCommand {
             eprintln!("Updating binary to hashing...");
             // move to hashing
             let binary = self
-                .change_binary_status(BinaryState::Hashing, binary, api)
+                .change_binary_status(ArgBinaryState::Hashing, binary, api)
                 .await
                 .unwrap();
 
@@ -270,7 +279,7 @@ impl CreateCommand {
         match command.run(self.global_options.clone().unwrap()).await? {
             Some(_) => {
                 let binary = self
-                    .change_binary_status(BinaryState::Signed, binary, api)
+                    .change_binary_status(ArgBinaryState::Signed, binary, api)
                     .await
                     .unwrap();
 
@@ -304,7 +313,7 @@ impl CreateCommand {
 
     async fn change_binary_status(
         &self,
-        state: BinaryState,
+        state: ArgBinaryState,
         binary: &Binary,
         api: &Api,
     ) -> Result<Binary, Error> {
@@ -380,13 +389,13 @@ impl CreateCommand {
         eprintln!("Updating binary to hashable...");
         // we created the binary parts not move it to hashable
         let binary = self
-            .change_binary_status(BinaryState::Hashable, binary, api)
+            .change_binary_status(ArgBinaryState::Hashable, binary, api)
             .await?;
 
         eprintln!("Updating binary to hashing...",);
         // move to hashing
         let binary = self
-            .change_binary_status(BinaryState::Hashing, &binary, api)
+            .change_binary_status(ArgBinaryState::Hashing, &binary, api)
             .await?;
 
         Ok(binary)
@@ -594,7 +603,7 @@ impl CreateCommand {
         api: &Api,
     ) -> Result<Binary, Error> {
         let binary = self
-            .change_binary_status(BinaryState::Uploadable, binary, api)
+            .change_binary_status(ArgBinaryState::Uploadable, binary, api)
             .await?;
 
         let update_command = UpdateCommand {
@@ -671,6 +680,7 @@ impl Command<ListCommand> {
 
 #[derive(Parser, Debug)]
 pub struct GetCommand {
+    /// The PRN of the resource to get.
     #[arg(long)]
     prn: String,
 
@@ -709,14 +719,19 @@ impl Command<GetCommand> {
 
 #[derive(Parser, Debug)]
 pub struct UpdateCommand {
+    /// The PRN of the resource you wish to update.
     #[arg(long)]
     prn: String,
+    /// An arbitrary string attached to the resource. Often useful for displaying to users.
     #[arg(long)]
     pub description: Option<String>,
-    #[arg(long, value_parser = BinaryState::from_str)]
-    pub state: Option<BinaryState>,
+    /// The state to transition the binary to.
+    #[arg(long, value_enum)]
+    pub state: Option<ArgBinaryState>,
+    /// The base64 encoding of the SHA256 hash of the binary's content.
     #[arg(long)]
     pub hash: Option<String>,
+    /// The size of the binary in bytes.
     #[arg(long)]
     pub size: Option<u64>,
 
@@ -732,7 +747,7 @@ impl UpdateCommand {
         let params = UpdateBinaryParams {
             prn: self.prn,
             description: self.description,
-            state: self.state,
+            state: self.state.map(BinaryState::from),
             hash: self.hash,
             size: self.size,
         };
@@ -759,5 +774,28 @@ impl Command<UpdateCommand> {
         }
 
         Ok(())
+    }
+}
+
+#[derive(clap::ValueEnum, Clone, Debug)]
+pub enum ArgBinaryState {
+    Destroyed,
+    Hashable,
+    Hashing,
+    Signable,
+    Signed,
+    Uploadable,
+}
+
+impl From<ArgBinaryState> for BinaryState {
+    fn from(other: ArgBinaryState) -> BinaryState {
+        match other {
+            ArgBinaryState::Destroyed => BinaryState::Destroyed,
+            ArgBinaryState::Hashable => BinaryState::Hashable,
+            ArgBinaryState::Hashing => BinaryState::Hashing,
+            ArgBinaryState::Signable => BinaryState::Signable,
+            ArgBinaryState::Signed => BinaryState::Signed,
+            ArgBinaryState::Uploadable => BinaryState::Uploadable,
+        }
     }
 }

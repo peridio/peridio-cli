@@ -32,14 +32,16 @@ impl ArtifactVersionsCommand {
 }
 
 #[derive(Parser, Debug)]
-
 pub struct CreateCommand {
+    /// The PRN of the artifact you wish to create a version for.
     #[arg(long)]
     artifact_prn: String,
 
+    /// An arbitrary string attached to the resource. Often useful for displaying to users.
     #[arg(long)]
     description: Option<String>,
 
+    /// The version as a string.
     #[arg(long)]
     version: String,
 }
@@ -109,6 +111,7 @@ impl Command<ListCommand> {
 
 #[derive(Parser, Debug)]
 pub struct GetCommand {
+    /// The PRN of the resource to get.
     #[arg(long)]
     prn: String,
 }
@@ -141,9 +144,11 @@ impl Command<GetCommand> {
 
 #[derive(Parser, Debug)]
 pub struct UpdateCommand {
+    /// The PRN of the resource to update.
     #[arg(long)]
     prn: String,
 
+    /// An arbitrary string attached to the resource. Often useful for displaying to users.
     #[arg(long)]
     pub description: Option<String>,
 }

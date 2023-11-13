@@ -34,12 +34,15 @@ impl ArtifactsCommand {
 #[derive(Parser, Debug)]
 
 pub struct CreateCommand {
+    /// An arbitrary string attached to the resource. Often useful for displaying to users.
     #[arg(long)]
     description: Option<String>,
 
+    /// The resource's name, meant to be displayable to users.
     #[arg(long)]
     name: String,
 
+    /// The PRN of the organization you wish to create the resource within.
     #[arg(long)]
     organization_prn: String,
 }
@@ -99,6 +102,7 @@ impl Command<ListCommand> {
 
 #[derive(Parser, Debug)]
 pub struct GetCommand {
+    /// The PRN of the resource to get.
     #[arg(long)]
     prn: String,
 }
@@ -126,12 +130,15 @@ impl Command<GetCommand> {
 
 #[derive(Parser, Debug)]
 pub struct UpdateCommand {
+    /// The PRN of the resource to update.
     #[arg(long)]
     prn: String,
 
+    /// An arbitrary string attached to the resource. Often useful for displaying to users.
     #[arg(long)]
     pub description: Option<String>,
 
+    /// The resource's name, meant to be displayable to users.
     #[arg(long)]
     pub name: Option<String>,
 }

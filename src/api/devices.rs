@@ -40,27 +40,39 @@ impl DevicesCommand {
 
 #[derive(Parser, Debug)]
 pub struct CreateCommand {
+    /// An arbitrary string attached to the resource. Often useful for displaying to users.
     #[arg(long)]
     description: Option<String>,
 
+    /// Whether or not the device is healthy (quarantined or not).
     #[arg(long)]
     healthy: Option<bool>,
 
+    /// The device's identifier.
     #[arg(long)]
     identifier: String,
 
+    /// The device's last communication time.
     #[arg(long)]
     last_communication: Option<String>,
 
+    /// The name of the product you wish to create the resource within.
     #[arg(long)]
     product_name: String,
 
+    /// A list of tags to attach to the device.
+    ///
+    /// If using firmwares and deployments, tags can be used to target devices.
     #[arg(long)]
     tags: Option<Vec<String>>,
 
+    /// The target of the device.
+    ///
+    /// Commonly used to store the device's target triplet to indicate architecture/compiler compatibility.
     #[arg(long)]
     target: Option<String>,
 
+    /// The PRN of the cohort you wish to add the device to.
     #[arg(long)]
     cohort_prn: Option<String>,
 }
@@ -96,9 +108,11 @@ impl Command<CreateCommand> {
 
 #[derive(Parser, Debug)]
 pub struct DeleteCommand {
+    /// The identifier of the device you wish to delete.
     #[arg(long)]
     device_identifier: String,
 
+    /// The name of the product you wish to delete the resource within.
     #[arg(long)]
     product_name: String,
 }
@@ -127,9 +141,11 @@ impl Command<DeleteCommand> {
 
 #[derive(Parser, Debug)]
 pub struct GetCommand {
+    /// The identifier of the device you wish to get.
     #[arg(long)]
     device_identifier: String,
 
+    /// The name of the product you wish to get the resource within.
     #[arg(long)]
     product_name: String,
 }
@@ -159,6 +175,7 @@ impl Command<GetCommand> {
 
 #[derive(Parser, Debug)]
 pub struct ListCommand {
+    /// The name of the product
     #[arg(long)]
     product_name: String,
 }
@@ -187,24 +204,31 @@ impl Command<ListCommand> {
 
 #[derive(Parser, Debug)]
 pub struct UpdateCommand {
+    /// An arbitrary string attached to the resource. Often useful for displaying to users.
     #[arg(long)]
     description: Option<String>,
 
+    /// The identifier of the device you wish to update.
     #[arg(long)]
     device_identifier: String,
 
+    /// Whether or not the device is healthy (quarantined or not).
     #[arg(long)]
     healthy: Option<bool>,
 
+    /// The device's last communication time.
     #[arg(long)]
     last_communication: Option<String>,
 
+    /// The name of the product you wish to update the resource within.
     #[arg(long)]
     product_name: String,
 
+    /// A list of tags to attach to the device.
     #[arg(long)]
     tags: Option<Vec<String>>,
 
+    /// The target of the device.
     #[arg(long)]
     target: Option<String>,
 }
@@ -239,9 +263,11 @@ impl Command<UpdateCommand> {
 
 #[derive(Parser, Debug)]
 pub struct AuthenticateCommand {
+    /// The name of the product you wish to authenticate the device within.
     #[arg(long)]
     product_name: String,
 
+    /// The certificate of the device you wish to authenticate.
     #[arg(
         long,
         conflicts_with("certificate_path"),
@@ -249,6 +275,7 @@ pub struct AuthenticateCommand {
     )]
     certificate: Option<String>,
 
+    /// The path to the certificate of the device you wish to authenticate.
     #[arg(
         long,
         conflicts_with("certificate"),

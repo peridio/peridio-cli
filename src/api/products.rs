@@ -50,6 +50,7 @@ impl ProductsCommand {
 
 #[derive(Parser, Debug)]
 pub struct CreateCommand {
+    /// The resource's name, meant to be displayable to users.
     #[arg(long)]
     name: String,
 }
@@ -78,6 +79,7 @@ impl Command<CreateCommand> {
 
 #[derive(Parser, Debug)]
 pub struct DeleteCommand {
+    /// The name of the resource to delete.
     #[arg(long)]
     product_name: String,
 }
@@ -105,6 +107,7 @@ impl Command<DeleteCommand> {
 
 #[derive(Parser, Debug)]
 pub struct GetCommand {
+    /// The name of the resource to get.
     #[arg(long)]
     product_name: String,
 }
@@ -157,9 +160,11 @@ impl Command<ListCommand> {
 
 #[derive(Parser, Debug)]
 pub struct UpdateCommand {
+    /// The resource's name, meant to be displayable to users.
     #[arg(long)]
     name: Option<String>,
 
+    /// The name (currently) of the resource to update.
     #[arg(long)]
     product_name: String,
 }
@@ -191,12 +196,15 @@ impl Command<UpdateCommand> {
 
 #[derive(Parser, Debug)]
 pub struct AddUserCommand {
+    /// The name of the product to add the user to.
     #[arg(long)]
     product_name: String,
 
+    /// The role to assign to the user in the product.
     #[arg(long)]
     role: String,
 
+    /// The username of the user to add to the product.
     #[arg(long)]
     username: String,
 }
@@ -227,9 +235,11 @@ impl Command<AddUserCommand> {
 
 #[derive(Parser, Debug)]
 pub struct RemoveUserCommand {
+    /// The name of the product to remove the user from.
     #[arg(long)]
     product_name: String,
 
+    /// The username of the user to remove from the product.
     #[arg(long)]
     user_username: String,
 }
@@ -258,9 +268,11 @@ impl Command<RemoveUserCommand> {
 
 #[derive(Parser, Debug)]
 pub struct GetUserCommand {
+    /// The name of the product to get the user within.
     #[arg(long)]
     product_name: String,
 
+    /// The username of the user to get within the product.
     #[arg(long)]
     user_username: String,
 }
@@ -290,6 +302,7 @@ impl Command<GetUserCommand> {
 
 #[derive(Parser, Debug)]
 pub struct ListUsersCommand {
+    /// The name of the product to list the users within.
     #[arg(long)]
     product_name: String,
 }
@@ -318,12 +331,15 @@ impl Command<ListUsersCommand> {
 
 #[derive(Parser, Debug)]
 pub struct UpdateUserCommand {
+    /// The name of the product to update the user within.
     #[arg(long)]
     product_name: String,
 
+    /// The role to assign to the user in the product.
     #[arg(long)]
     role: String,
 
+    /// The username of the user to update within the product.
     #[arg(long)]
     user_username: String,
 }
