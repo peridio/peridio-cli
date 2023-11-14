@@ -39,52 +39,57 @@ impl BinarySignaturesCommand {
 
 #[derive(Parser, Debug)]
 pub struct CreateCommand {
-    #[arg(
-        long,
-        short = 'b',
-        help = "The PRN of the binary this signature will be associated with."
-    )]
+    /// The PRN of the binary to create a binary signature for.
+    #[arg(long, short = 'b')]
     pub binary_prn: String,
+    /// The path of the file to automatically create a signature for. If you instead want to compute and provide the signature yourself, use the --signature option.
     #[arg(
         long,
         short = 'c',
         conflicts_with = "signature",
-        required_unless_present = "signature",
-        help = "The path of the file to create a signature for."
+        required_unless_present = "signature"
     )]
     pub binary_content_path: Option<String>,
+    /// The signature of the binary content.
+    ///
+    /// The hex encoded Ed25519 signature of the SHA256 hash of the binary content. To avoid computing this yourself, you can use the --binary-content-path option.
     #[arg(
         long,
         short = 'g',
         conflicts_with = "signing_key_private",
         conflicts_with = "binary_content_path",
         required_unless_present_any = ["signing_key_private", "binary_content_path"],
-        help = "The hex encoded signature of the SHA256 hash of the binary content."
     )]
     pub signature: Option<String>,
+    /// The name of a signing key pair as defined in your Peridio CLI config.
+    ///
+    /// If you instead want to provide the private key and PRN of the signing key yourself, use the --signing-key-private and --signing-key-prn options.
     #[arg(
         long,
         short = 's',
         conflicts_with = "signing_key_private",
         conflicts_with = "signing_key_prn",
         required_unless_present_any = ["signing_key_private", "signing_key_prn"],
-        help = "The name of a signing key pair as defined in your Peridio CLI config."
     )]
     pub signing_key_pair: Option<String>,
+    /// The path of the file containing the private key to sign the binary with.
+    ///
+    /// If you instead want to provide the name of a signing key pair as defined in your Peridio CLI config, use the --signing-key-pair option.
     #[arg(
         long,
         conflicts_with = "signature",
         conflicts_with = "signing_key_pair",
         required_unless_present_any = ["signature", "signing_key_pair"],
         requires = "binary_content_path",
-        help = "The PEM base64-encoded PKCS #8 private key."
     )]
     pub signing_key_private: Option<String>,
+    /// The PRN of the signing key to tell Peridio to verify the signature with.
+    ///
+    /// If you instead want to provide the name of a signing key pair as defined in your Peridio CLI config, use the --signing-key-pair option.
     #[arg(
         long,
         conflicts_with = "signing_key_pair",
-        required_unless_present = "signing_key_pair",
-        help = "The PRN of the signing key to tell Peridio to verify the signature with."
+        required_unless_present = "signing_key_pair"
     )]
     pub signing_key_prn: Option<String>,
 
@@ -204,6 +209,7 @@ impl Command<CreateCommand> {
 
 #[derive(Parser, Debug)]
 pub struct DeleteCommand {
+    /// The PRN of the resource to delete.
     #[arg(long)]
     binary_signature_prn: String,
 }

@@ -35,12 +35,15 @@ impl DeviceCertificatesCommand {
 
 #[derive(Parser, Debug)]
 pub struct CreateCommand {
+    /// The identifier of the device you wish to create a certificate for.
     #[arg(long)]
     device_identifier: String,
 
+    /// The name of the product you wish to create the resource within.
     #[arg(long)]
     product_name: String,
 
+    /// The certificate PEM content.
     #[arg(
         long,
         conflicts_with("certificate_path"),
@@ -48,6 +51,7 @@ pub struct CreateCommand {
     )]
     certificate: Option<String>,
 
+    /// The path to the certificate's PEM content
     #[arg(
         long,
         conflicts_with("certificate"),
@@ -95,12 +99,15 @@ impl Command<CreateCommand> {
 
 #[derive(Parser, Debug)]
 pub struct DeleteCommand {
+    /// The identifier of the device you wish to delete a certificate for.
     #[arg(long)]
     device_identifier: String,
 
+    /// The name of the product you wish to delete the resource within.
     #[arg(long)]
     product_name: String,
 
+    /// The serial number of the certificate you wish to delete.
     #[arg(long)]
     certificate_serial: String,
 }
@@ -136,12 +143,15 @@ impl Command<DeleteCommand> {
 
 #[derive(Parser, Debug)]
 pub struct GetCommand {
+    /// The identifier of the device you wish to get a certificate for.
     #[arg(long)]
     device_identifier: String,
 
+    /// The name of the product you wish to get the resource within.
     #[arg(long)]
     product_name: String,
 
+    /// The serial number of the certificate you wish to get.
     #[arg(long)]
     certificate_serial: String,
 }
@@ -177,9 +187,11 @@ impl Command<GetCommand> {
 
 #[derive(Parser, Debug)]
 pub struct ListCommand {
+    /// The identifier of the device you wish to list certificates for.
     #[arg(long)]
     device_identifier: String,
 
+    /// The name of the product you wish to list the resource within.
     #[arg(long)]
     product_name: String,
 }

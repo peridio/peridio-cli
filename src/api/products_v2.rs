@@ -35,12 +35,15 @@ impl ProductsV2Command {
 #[derive(Parser, Debug)]
 
 pub struct CreateCommand {
+    /// Whether the product is archived.
     #[arg(long)]
     archived: Option<bool>,
 
+    /// The resource's name, meant to be displayable to users.
     #[arg(long)]
     name: String,
 
+    /// The PRN of the organization you wish to create the resource within.
     #[arg(long)]
     organization_prn: String,
 }
@@ -100,6 +103,7 @@ impl Command<ListCommand> {
 
 #[derive(Parser, Debug)]
 pub struct GetCommand {
+    /// The PRN of the resource to get.
     #[arg(long)]
     prn: String,
 }
@@ -127,10 +131,13 @@ impl Command<GetCommand> {
 
 #[derive(Parser, Debug)]
 pub struct UpdateCommand {
+    /// The PRN of the resource to update.
     #[arg(long)]
     prn: String,
+    /// The resource's name, meant to be displayable to users.
     #[arg(long)]
     name: Option<String>,
+    /// Whether the product is archived.
     #[arg(long)]
     archived: Option<bool>,
 }

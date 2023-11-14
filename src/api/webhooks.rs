@@ -44,12 +44,18 @@ impl WebhooksCommand {
 #[derive(Parser, Debug)]
 
 pub struct CreateCommand {
+    /// An arbitrary string attached to the resource. Often useful for displaying to users.
     #[arg(long)]
     description: Option<String>,
+    /// The events that will trigger the webhook.
+    ///
+    /// Supply the flag multiple times to add multiple events.
     #[arg(long)]
     enabled_events: Option<Vec<String>>,
+    /// The URL that the webhook will send a POST request to.
     #[arg(long)]
     url: String,
+    /// The PRN of the organization you wish to create the resource within.
     #[arg(long)]
     organization_prn: String,
 }
@@ -110,6 +116,7 @@ impl Command<ListCommand> {
 
 #[derive(Parser, Debug)]
 pub struct GetCommand {
+    /// The PRN of the resource to get.
     #[arg(long)]
     prn: String,
 }
@@ -137,6 +144,7 @@ impl Command<GetCommand> {
 
 #[derive(Parser, Debug)]
 pub struct RollSecretCommand {
+    /// The PRN of the resource to roll the secret for.
     #[arg(long)]
     prn: String,
 }
@@ -164,6 +172,7 @@ impl Command<RollSecretCommand> {
 
 #[derive(Parser, Debug)]
 pub struct TestFireCommand {
+    /// The PRN of the resource to test fire.
     #[arg(long)]
     prn: String,
 }
@@ -191,14 +200,21 @@ impl Command<TestFireCommand> {
 
 #[derive(Parser, Debug)]
 pub struct UpdateCommand {
+    /// The PRN of the resource to update.
     #[arg(long)]
     prn: String,
+    /// An arbitrary string attached to the resource. Often useful for displaying to users.
     #[arg(long)]
     pub description: Option<String>,
+    /// The URL that the webhook will send a POST request to.
     #[arg(long)]
     pub url: Option<String>,
+    /// The state of the webhook.
     #[arg(long)]
     pub state: Option<String>,
+    /// The events that will trigger the webhook.
+    ///
+    /// Supply the flag multiple times to add multiple events.
     #[arg(long)]
     pub enabled_events: Option<Vec<String>>,
 }
@@ -230,6 +246,7 @@ impl Command<UpdateCommand> {
 
 #[derive(Parser, Debug)]
 pub struct DeleteCommand {
+    /// The PRN of the resource to delete.
     #[arg(long)]
     webhook_prn: String,
 }

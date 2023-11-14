@@ -33,12 +33,17 @@ impl FirmwaresCommand {
 
 #[derive(Parser, Debug)]
 pub struct CreateCommand {
+    /// The path to the firmware's binary content.
     #[arg(long)]
     firmware_path: String,
 
+    /// The name of the product you wish to create the resource within.
     #[arg(long)]
     product_name: String,
 
+    /// The time-to-live of the firmware in seconds.
+    ///
+    /// This is the amount of time the firmware can go without being associated to neither a deployment nor a device. After this time, the firmware will be deleted.
     #[arg(long)]
     ttl: Option<u32>,
 }
@@ -69,9 +74,11 @@ impl Command<CreateCommand> {
 
 #[derive(Parser, Debug)]
 pub struct DeleteCommand {
+    /// The UUID of the firmware you wish to delete.
     #[arg(long)]
     firmware_uuid: Uuid,
 
+    /// The name of the product you wish to delete the resource within.
     #[arg(long)]
     product_name: String,
 }
@@ -100,9 +107,11 @@ impl Command<DeleteCommand> {
 
 #[derive(Parser, Debug)]
 pub struct GetCommand {
+    /// The UUID of the firmware you wish to get.
     #[arg(long)]
     firmware_uuid: Uuid,
 
+    /// The name of the product you wish to get the resource within.
     #[arg(long)]
     product_name: String,
 }
@@ -132,6 +141,7 @@ impl Command<GetCommand> {
 
 #[derive(Parser, Debug)]
 pub struct ListCommand {
+    /// The name of the product you wish to list the resources within.
     #[arg(long)]
     product_name: String,
 }

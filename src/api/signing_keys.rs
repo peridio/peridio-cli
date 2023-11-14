@@ -41,6 +41,9 @@ impl SigningKeysCommand {
 
 #[derive(Parser, Debug)]
 pub struct CreateCommand {
+    /// The public key raw file contents.
+    ///
+    /// If you instead want to provide a path to a file, use the `--path` or `--key` options for PEM or raw files respectively.
     #[arg(
         long,
         conflicts_with = "key",
@@ -49,26 +52,28 @@ pub struct CreateCommand {
         required_unless_present = "path"
     )]
     value: Option<String>,
+    /// The resource's name, meant to be displayable to users.
     #[arg(long)]
     name: String,
+    /// The PRN of the organization you wish to create the resource within.
     #[arg(long)]
     organization_prn: String,
+    /// The path to the public key raw file.
     #[arg(
         long,
         conflicts_with = "value",
         conflicts_with = "path",
         required_unless_present = "value",
-        required_unless_present = "path",
-        help = "The path to the public key raw file."
+        required_unless_present = "path"
     )]
     key: Option<String>,
+    /// The path to the public key pem file.
     #[arg(
         long,
         conflicts_with = "key",
         conflicts_with = "value",
         required_unless_present = "key",
-        required_unless_present = "value",
-        help = "The path to the public key pem file."
+        required_unless_present = "value"
     )]
     path: Option<String>,
 }
@@ -116,6 +121,7 @@ impl Command<CreateCommand> {
 
 #[derive(Parser, Debug)]
 pub struct GetCommand {
+    /// The PRN of the resource to get.
     #[arg(long)]
     prn: String,
 }
@@ -173,6 +179,7 @@ impl Command<ListCommand> {
 
 #[derive(Parser, Debug)]
 pub struct DeleteCommand {
+    /// The PRN of the resource to delete.
     #[arg(long)]
     signing_key_prn: String,
 }

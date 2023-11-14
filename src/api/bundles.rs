@@ -30,9 +30,11 @@ impl BundlesCommand {
 #[derive(Parser, Debug)]
 
 pub struct CreateCommand {
+    /// The PRNs of the artifact versions to include binaries from in the bundle.
     #[clap(short, long, value_parser, num_args = 1.., value_delimiter = ' ')]
     artifact_version_prns: Vec<String>,
 
+    /// The PRN of the organization to create the bundle for.
     #[arg(long)]
     organization_prn: String,
 }
@@ -91,6 +93,7 @@ impl Command<ListCommand> {
 
 #[derive(Parser, Debug)]
 pub struct GetCommand {
+    /// The PRN of the resource to get.
     #[arg(long)]
     prn: String,
 }

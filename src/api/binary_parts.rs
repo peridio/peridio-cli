@@ -1,6 +1,3 @@
-use std::fs;
-use std::path::PathBuf;
-
 use super::Command;
 use crate::print_json;
 use crate::ApiSnafu;
@@ -14,6 +11,8 @@ use peridio_sdk::api::binary_parts::ListBinaryPartsResponse;
 use peridio_sdk::api::Api;
 use peridio_sdk::api::ApiOptions;
 use snafu::ResultExt;
+use std::fs;
+use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
 pub enum BinaryPartsCommand {
@@ -30,23 +29,31 @@ impl BinaryPartsCommand {
     }
 }
 
+/// Create a binary part.
+///
+/// Binary parts track the chunks of a multipart upload to Peridio.
 #[derive(Parser, Debug)]
-
 pub struct CreateCommand {
+    /// The PRN of the binary you wish to create a part for.
     #[arg(long)]
     pub binary_prn: String,
+    /// The total size of the binary's content.
     #[arg(
         long,
         conflicts_with("binary_content_path"),
         required_unless_present("binary_content_path")
     )]
     pub expected_binary_size: Option<u64>,
+    /// The base64 encoding of the SHA256 hash of the binary part's data.
     #[arg(long)]
     pub hash: String,
+    /// Uniquely identifies a binary part and defines its position within the binary being created. Can be any number from 1 to 10,000, inclusive. If you create a binary part using the same index that was used with a previous binary part, the previously uploaded binary part is overwritten.
     #[arg(long)]
     pub index: u16,
+    /// The size in bytes of the binary part.
     #[arg(long)]
     pub size: u64,
+    /// The path to the file you wish to upload as the binary's content.
     #[arg(
         long,
         conflicts_with("expected_binary_size"),

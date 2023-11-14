@@ -35,9 +35,11 @@ impl OrganizationCommand {
 
 #[derive(Parser, Debug)]
 pub struct AddUserCommand {
+    /// The role the user has within the organization.
     #[arg(long)]
     role: String,
 
+    /// The username of the user to add to the organization.
     #[arg(long)]
     username: String,
 }
@@ -72,6 +74,7 @@ impl Command<AddUserCommand> {
 
 #[derive(Parser, Debug)]
 pub struct RemoveUserCommand {
+    /// The username of the user to remove from the organization.
     #[arg(long)]
     user_username: String,
 }
@@ -105,6 +108,7 @@ impl Command<RemoveUserCommand> {
 
 #[derive(Parser, Debug)]
 pub struct GetUserCommand {
+    /// The username of the user to get from the organization.
     #[arg(long)]
     user_username: String,
 }
@@ -167,9 +171,11 @@ impl Command<ListUsersCommand> {
 
 #[derive(Parser, Debug)]
 pub struct UpdateUserCommand {
+    /// The role the user has within the organization.
     #[arg(long)]
     role: String,
 
+    /// The username of the user to update within the organization.
     #[arg(long)]
     user_username: String,
 }
