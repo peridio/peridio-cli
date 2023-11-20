@@ -33,6 +33,7 @@ use reqwest::Body;
 use reqwest::Client;
 use sha2::{Digest, Sha256};
 use snafu::ResultExt;
+use std::cmp;
 use std::io::Read;
 use std::io::Seek;
 use std::sync::Arc;
@@ -102,7 +103,7 @@ pub struct CreateCommand {
         value_parser = clap::value_parser!(u64).range(5242880..50000000000),
     )]
     binary_part_size: Option<u64>,
-    /// Limit the concurrency of jobs that create and upload binary parts. [default: 2x the core count]
+    /// Limit the concurrency of jobs that create and upload binary parts. [default: 2x the core count, to a maximum of 16]
     #[arg(long, requires = "content_path")]
     concurrency: Option<u8>,
     /// The name of a signing key pair in your Peridio CLI config. This will dictate both the private key to create a binary signature with as well as the signing key Peridio will use to verify the binary signature.
@@ -166,7 +167,7 @@ impl CreateCommand {
                 if self.concurrency.is_none() {
                     // default to 2x the core count
                     self.concurrency = Some(
-                        (available_parallelism().unwrap().get() * 2)
+                        cmp::min(available_parallelism().unwrap().get() * 2, 16)
                             .try_into()
                             .unwrap(),
                     );
