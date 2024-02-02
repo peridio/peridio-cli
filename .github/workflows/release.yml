@@ -77,10 +77,10 @@ jobs:
           security default-keychain -s $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
-          # make cert accesible by codesign
+          # make cert accessible by codesign
           security import $CERTIFICATE_PATH -P "$MACOS_CERTIFICATE_PWD" -k $KEYCHAIN_PATH -T /usr/bin/codesign
 
-          # avoid password promtp
+          # avoid password prompt
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
           # give permissions

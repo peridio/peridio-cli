@@ -440,7 +440,7 @@ impl CreateCommand {
                     }
 
                     // we want to open the file in each thread, this is due to concurrency issues
-                    // when using `Seek` from diferent threads theres a race condition in the data
+                    // when using `Seek` from different threads theres a race condition in the data
                     let mut file = fs::File::open(&content_path).unwrap();
 
                     let file_position = binary_part_size * (index - 1);
