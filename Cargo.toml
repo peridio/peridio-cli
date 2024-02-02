@@ -9,7 +9,7 @@ edition = "2021"
 [dependencies]
 peridio-sdk = { git = "https://github.com/peridio/peridio-rust.git", rev = "3cdf607" }
 serde_json = "1.0"
-snafu = "0.7"
+snafu = "0.8"
 tokio = { version = "1.36.0", features = ["full"] }
 tower = {version = "0.4"}
 directories = "5.0.1"
