@@ -22,7 +22,7 @@ tar = "0.4.38"
 uuid = {version = "1.4.1", features = ["v4", "fast-rng", "macro-diagnostics"]}
 base64 = "0.21.3"
 clap = {version = "4.4.2", features = ["derive", "env"]}
-termcolor = "1.2.0"
+termcolor = "1.4.1"
 ed25519-dalek  = { version = "2", features = ["pem"] }
 sha2 = "0.10.7"
 backon = "0.4.1"
