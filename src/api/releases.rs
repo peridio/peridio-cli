@@ -59,7 +59,7 @@ pub struct CreateCommand {
     organization_prn: String,
     /// The phase value controls the distribution of the update to your fleet.
     ///
-    /// Decimals in [0.0, 1.0] are treated as percents, e.g., to allow 20% of the cohort to update, you would specifiy 0.2.
+    /// Decimals in [0.0, 1.0] are treated as percents, e.g., to allow 20% of the cohort to update, you would specify 0.2.
     ///
     /// Integers >= 2 are treated as absolute device counts, e.g., to allow 40 of the cohort's devices to update, you would specifiy 40.
     ///
@@ -215,7 +215,7 @@ pub struct UpdateCommand {
 
     /// The phase value controls the distribution of the update to your fleet.
     ///
-    /// Decimals in [0.0, 1.0] are treated as percents, e.g., to allow 20% of the cohort to update, you would specifiy 0.2.
+    /// Decimals in [0.0, 1.0] are treated as percents, e.g., to allow 20% of the cohort to update, you would specify 0.2.
     ///
     /// Integers >= 2 are treated as absolute device counts, e.g., to allow 40 of the cohort's devices to update, you would specifiy 40.
     ///
