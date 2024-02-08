@@ -27,3 +27,9 @@ ed25519-dalek  = { version = "2", features = ["pem"] }
 sha2 = "0.10.7"
 backon = "0.4.1"
 console = "0.15.7"
+
+[dev-dependencies]
+# assert on peridio-cli for integration tests
+assert_cmd = "2.0.13"
+# predicates for matching peridio-cli output
+predicates = "3.1.0"
