@@ -2,6 +2,7 @@ mod api;
 mod config;
 mod utils;
 
+use std::process::ExitCode;
 use std::{
     fmt,
     io::{self, ErrorKind},
@@ -164,22 +165,27 @@ enum Command {
 }
 
 #[tokio::main]
-async fn main() {
-    if let Err(e) = Program::parse().run().await {
-        match e {
-            Error::Api { source } => {
-                eprintln!("{source}")
+async fn main() -> ExitCode {
+    match Program::parse().run().await {
+        Err(error) => {
+            match error {
+                Error::Api { source } => {
+                    eprintln!("{source}")
+                }
+
+                Error::NonExistingPath { path, source: _ } => {
+                    let mut error = StyledStr::new();
+                    error.push_str(Some(Style::Error), "error: ".to_string());
+                    error.push_str(None, "Path does not exist:\r\n".to_string());
+                    error.push_str(Some(Style::Warning), format!("\t{}", path.display()));
+                    error.print_data_err();
+                }
+
+                error => eprintln!("Error: {error}"),
             }
 
-            Error::NonExistingPath { path, source: _ } => {
-                let mut error = StyledStr::new();
-                error.push_str(Some(Style::Error), "error: ".to_string());
-                error.push_str(None, "Path does not exist:\r\n".to_string());
-                error.push_str(Some(Style::Warning), format!("\t{}", path.display()));
-                error.print_data_err();
-            }
-
-            error => eprintln!("Error: {error}"),
+            ExitCode::FAILURE
         }
+        Ok(()) => ExitCode::SUCCESS,
     }
 }
