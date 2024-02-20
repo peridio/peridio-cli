@@ -38,6 +38,8 @@ where
 pub enum CliCommands {
     #[command(flatten)]
     ApiCommand(ApiCommand),
+    #[command(subcommand)]
+    Users(users::UsersCommand),
     #[command()]
     Upgrade(upgrade::UpgradeCommand),
     #[command(subcommand)]
@@ -80,8 +82,6 @@ pub enum ApiCommand {
     Releases(releases::ReleasesCommand),
     #[command(subcommand)]
     SigningKeys(signing_keys::SigningKeysCommand),
-    #[command(subcommand)]
-    Users(users::UsersCommand),
     #[command(subcommand)]
     Webhooks(webhooks::WebhooksCommand),
 }
@@ -134,10 +134,10 @@ impl CliCommands {
                     ApiCommand::ProductsV2(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Releases(cmd) => cmd.run(global_options).await?,
                     ApiCommand::SigningKeys(cmd) => cmd.run(global_options).await?,
-                    ApiCommand::Users(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Webhooks(cmd) => cmd.run(global_options).await?,
                 }
             }
+            CliCommands::Users(cmd) => cmd.run(global_options).await?,
             CliCommands::Upgrade(cmd) => cmd.run().await?,
             CliCommands::Config(cmd) => cmd.run(global_options).await?,
         };
