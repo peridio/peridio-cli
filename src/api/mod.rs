@@ -91,30 +91,18 @@ impl CliCommands {
         match self {
             CliCommands::ApiCommand(api) => {
                 // require api key
-                let mut error_vec = Vec::new();
+                let mut missing_arguments = Vec::new();
 
                 if global_options.api_key.is_none() {
-                    error_vec.push("--api-key".to_owned());
+                    missing_arguments.push("--api-key".to_owned());
                 }
 
                 // require organization name
                 if global_options.organization_name.is_none() {
-                    error_vec.push("--organization-name".to_owned());
+                    missing_arguments.push("--organization-name".to_owned());
                 }
 
-                if !error_vec.is_empty() {
-                    let mut error = StyledStr::new();
-
-                    error.push_str(Some(Style::Error), "error: ".to_string());
-                    error.push_str(
-                        None,
-                        "The following arguments are required at the global level:\r\n".to_string(),
-                    );
-                    for error_msg in error_vec.iter() {
-                        error.push_str(Some(Style::Success), format!("\t{error_msg}\r\n"));
-                    }
-                    error.print_data_err();
-                }
+                Self::print_missing_arguments(missing_arguments);
 
                 match api {
                     ApiCommand::Artifacts(cmd) => cmd.run(global_options).await?,
@@ -143,5 +131,21 @@ impl CliCommands {
         };
 
         Ok(())
+    }
+
+    pub(crate) fn print_missing_arguments(missing_arguments: Vec<String>) {
+        if !missing_arguments.is_empty() {
+            let mut error = StyledStr::new();
+
+            error.push_str(Some(Style::Error), "error: ".to_string());
+            error.push_str(
+                None,
+                "The following arguments are required:\r\n".to_string(),
+            );
+            for missing_argument in missing_arguments.iter() {
+                error.push_str(Some(Style::Success), format!("\t{missing_argument}\r\n"));
+            }
+            error.print_data_err();
+        }
     }
 }
