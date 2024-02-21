@@ -1,4 +1,5 @@
 use super::Command;
+use crate::api::CliCommands;
 use crate::print_json;
 use crate::ApiSnafu;
 use crate::Error;
@@ -26,6 +27,15 @@ pub struct MeCommand {}
 
 impl Command<MeCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+        // require api key
+        let mut missing_arguments = Vec::new();
+
+        if global_options.api_key.is_none() {
+            missing_arguments.push("--api-key".to_owned());
+        }
+
+        CliCommands::print_missing_arguments(missing_arguments);
+
         let api = Api::new(ApiOptions {
             api_key: global_options.api_key.unwrap(),
             endpoint: global_options.base_url,
