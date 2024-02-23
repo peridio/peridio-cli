@@ -119,6 +119,9 @@ jobs:
       - name: Migrate DB
         working-directory: ${{ env.PERIDIO_CLOUD_PATH }}
         run: mix ecto.migrate
+      - name: Add hosts to /etc/hosts
+        run: |
+          sudo echo "127.0.0.1 api.test.peridio.com" | sudo tee -a /etc/hosts
       - uses: actions-rs/cargo@v1
         with:
           command: test
