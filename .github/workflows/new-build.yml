@@ -85,6 +85,40 @@ jobs:
           ssh-key: ${{ secrets.PERIDIO_CLOUD_DEPLOY_KEY }}
           ref: main
           path: ${{ env.PERIDIO_CLOUD_PATH }}
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: 26.2.1
+          elixir-version: 1.16.1
+      - name: Cache deps
+        id: cache-deps
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-elixir-deps
+        with:
+          path: ${{ env.PERIDIO_CLOUD_PATH }}/deps
+          key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-${{ env.cache-name }}-
+      - name: Cache compiled build
+        id: cache-build
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-compiled-build
+        with:
+          path: ${{ env.PERIDIO_CLOUD_PATH }}/_build
+          key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-${{ env.cache-name }}-
+            ${{ runner.os }}-mix-
+      - name: Get dependencies and compile peridio-cloud
+        working-directory: ${{ env.PERIDIO_CLOUD_PATH }}
+        run: |
+          mix deps.get
+          mix compile --warnings-as-error       
+      - name: Migrate DB
+        working-directory: ${{ env.PERIDIO_CLOUD_PATH }}
+        run: mix ecto.migrate
       - uses: actions-rs/cargo@v1
         with:
           command: test
