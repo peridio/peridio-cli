@@ -39,6 +39,7 @@ jobs:
     runs-on: "${{ matrix.os }}"
     env:
       CARGO_NET_GIT_FETCH_WITH_CLI: true
+      PERIDIO_CLOUD_PATH: tests/support/peridio-cloud
     strategy:
       matrix:
         include:
@@ -69,7 +70,7 @@ jobs:
           repository: peridio/peridio-cloud
           ssh-key: ${{ secrets.PERIDIO_CLOUD_DEPLOY_KEY }}
           ref: main
-          path: tests/support/peridio-cloud
+          path: ${{ env.PERIDIO_CLOUD_PATH }}
       - uses: actions-rs/cargo@v1
         with:
           command: test
