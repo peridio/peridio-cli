@@ -74,7 +74,7 @@ fn with_users_with_me_shows_email_and_username() {
     let api_key = user.create_api_key();
     let ca_path = ca_path_buf.into_os_string().into_string().unwrap();
 
-    PERIDIO_CLOUD_API_CHILD.init();
+    PERIDIO_CLOUD_API.init();
 
     let assert = Command::cargo_bin("peridio-cli")
         .unwrap()
@@ -90,17 +90,7 @@ fn with_users_with_me_shows_email_and_username() {
     let stderr = str::from_utf8(output.stderr.as_slice()).unwrap();
 
     if !output.status.success() {
-        let peridio_cloud_api_exit_code = match PERIDIO_CLOUD_API_CHILD.write().take() {
-            Some(mut child) => match child.try_wait().unwrap() {
-                Some(exit_status) => exit_status.code().unwrap_or(0),
-                None => {
-                    child.kill().unwrap();
-
-                    0
-                }
-            },
-            None => 0,
-        };
+        let peridio_cloud_api_exit_code = PERIDIO_CLOUD_API.write().exit_code();
 
         panic!(
             "peridio-cli --base-url {} --ca-path {} --api-key {}\nSTDOUT:\n  {}\nSTDERR:\n  {}\n\nmix -S phx.server\nEXIT:{}",
@@ -140,39 +130,6 @@ fn with_users_with_me_shows_email_and_username() {
         panic!("username ({:?}) is not a string", username_value);
     };
     assert_eq!(username_string, &user.username);
-}
-
-fn peridio_cloud_api_child() -> Child {
-    match peridio_cloud_api_mix_command()
-        .stderr(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .args(&["phx.server"])
-        .spawn()
-    {
-        Ok(child) => {
-            wait_for_server();
-
-            child
-        }
-        Err(error) => match error.kind() {
-            ErrorKind::NotFound => panic!("mix not found"),
-            _ => panic!("{:?}", error),
-        },
-    }
-}
-
-fn wait_for_server() {
-    let start = Instant::now();
-
-    while start.elapsed() < Duration::from_secs(30) {
-        match TcpStream::connect_timeout(&base_address(), Duration::from_secs(1)) {
-            Ok(_) => break,
-            Err(error) => match error.kind() {
-                ErrorKind::ConnectionRefused => sleep(Duration::from_secs(5)),
-                _ => panic!("{:?}", error),
-            },
-        }
-    }
 }
 
 fn base_url() -> String {
@@ -357,4 +314,71 @@ fn require_env_var(name: &str) -> String {
 const HOST: &'static str = "api.test.peridio.com";
 const PORT: u16 = 4002;
 #[dynamic(lazy, drop)]
-static mut PERIDIO_CLOUD_API_CHILD: Option<Child> = Some(peridio_cloud_api_child());
+static mut PERIDIO_CLOUD_API: PeridioCloudAPI = PeridioCloudAPI::new();
+
+struct PeridioCloudAPI {
+    child: Option<Child>,
+}
+impl PeridioCloudAPI {
+    fn new() -> Self {
+        Self {
+            child: Some(Self::child()),
+        }
+    }
+
+    fn child() -> Child {
+        match peridio_cloud_api_mix_command()
+            .stderr(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .args(["phx.server"])
+            .spawn()
+        {
+            Ok(child) => {
+                Self::wait_for_server();
+
+                child
+            }
+            Err(error) => match error.kind() {
+                ErrorKind::NotFound => panic!("mix not found"),
+                _ => panic!("{:?}", error),
+            },
+        }
+    }
+
+    fn wait_for_server() {
+        let start = Instant::now();
+
+        while start.elapsed() < Duration::from_secs(30) {
+            match TcpStream::connect_timeout(&base_address(), Duration::from_secs(1)) {
+                Ok(_) => break,
+                Err(error) => match error.kind() {
+                    ErrorKind::ConnectionRefused => sleep(Duration::from_secs(5)),
+                    _ => panic!("{:?}", error),
+                },
+            }
+        }
+    }
+
+    fn exit_code(&mut self) -> i32 {
+        match self.child.take() {
+            Some(mut child) => match child.try_wait().unwrap() {
+                Some(exit_status) => exit_status.code().unwrap_or(0),
+                None => {
+                    child.kill().unwrap();
+
+                    0
+                }
+            },
+            None => 0,
+        }
+    }
+}
+impl Drop for PeridioCloudAPI {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            if let Err(error) = child.kill() {
+                eprintln!("Could not kill child process: {}", error)
+            }
+        }
+    }
+}
