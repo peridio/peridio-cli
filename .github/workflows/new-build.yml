@@ -39,6 +39,21 @@ jobs:
     runs-on: "${{ matrix.os }}"
     env:
       CARGO_NET_GIT_FETCH_WITH_CLI: true
+      PERIDIO_CLOUD_PATH: tests/support/peridio-cloud
+      DATABASE_URL: postgres://db:db@0.0.0.0:5432/db
+    services:
+      postgres:
+        ports:
+          - 5432:5432
+        image: postgres:14.4
+        env:
+          POSTGRES_USER: db
+          POSTGRES_DB: db
+          POSTGRES_PASSWORD: db
+        options: --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     strategy:
       matrix:
         include:
@@ -63,6 +78,50 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
+      - name: Checkout peridio/peridio-cloud for integration tests
+        uses: actions/checkout@v4
+        with:
+          repository: peridio/peridio-cloud
+          ssh-key: ${{ secrets.PERIDIO_CLOUD_DEPLOY_KEY }}
+          ref: main
+          path: ${{ env.PERIDIO_CLOUD_PATH }}
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: 26.2.1
+          elixir-version: 1.16.1
+      - name: Cache deps
+        id: cache-deps
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-elixir-deps
+        with:
+          path: ${{ env.PERIDIO_CLOUD_PATH }}/deps
+          key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-${{ env.cache-name }}-
+      - name: Cache compiled build
+        id: cache-build
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-compiled-build
+        with:
+          path: ${{ env.PERIDIO_CLOUD_PATH }}/_build
+          key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-${{ env.cache-name }}-
+            ${{ runner.os }}-mix-
+      - name: Get dependencies and compile peridio-cloud
+        working-directory: ${{ env.PERIDIO_CLOUD_PATH }}
+        run: |
+          mix deps.get
+          mix compile --warnings-as-error       
+      - name: Migrate DB
+        working-directory: ${{ env.PERIDIO_CLOUD_PATH }}
+        run: mix ecto.migrate
+      - name: Add hosts to /etc/hosts
+        run: |
+          sudo echo "127.0.0.1 api.test.peridio.com" | sudo tee -a /etc/hosts
       - uses: actions-rs/cargo@v1
         with:
           command: test
