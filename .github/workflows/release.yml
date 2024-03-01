@@ -73,24 +73,24 @@ jobs:
 
           # create temporary keychain
 
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security default-keychain -s $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security -q create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security -q default-keychain -s $KEYCHAIN_PATH
+          security -q unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
           # make cert accessible by codesign
-          security import $CERTIFICATE_PATH -P "$MACOS_CERTIFICATE_PWD" -k $KEYCHAIN_PATH -T /usr/bin/codesign
+          security -q import $CERTIFICATE_PATH -P "$MACOS_CERTIFICATE_PWD" -k $KEYCHAIN_PATH -T /usr/bin/codesign
 
           # avoid password prompt
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security -q set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
           # give permissions
           chmod +x ./target/${{ matrix.target }}/release/peridio-cli
 
           # code sign
-          /usr/bin/codesign -s G6EQB4FDGD --deep -v -f --timestamp -o runtime ./target/${{ matrix.target }}/release/peridio-cli
+          /usr/bin/codesign -s G6EQB4FDGD --deep -f --timestamp -o runtime ./target/${{ matrix.target }}/release/peridio-cli
 
           # verify signing
-          /usr/bin/codesign --verify --verbose --strict ./target/${{ matrix.target }}/release/peridio-cli
+          /usr/bin/codesign --verify --strict ./target/${{ matrix.target }}/release/peridio-cli
 
           # zip file, notarize tool only works with zip files
           ditto -c -k --sequesterRsrc --keepParent "./target/${{ matrix.target }}/release/peridio-cli" "./target/${{ matrix.target }}/release/peridio-cli.zip"
