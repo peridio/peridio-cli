@@ -20,7 +20,7 @@ futures-util = "0.3.24"
 flate2 = "1.0.24"
 tar = "0.4.38"
 uuid = {version = "1.7", features = ["v4", "v7", "fast-rng", "macro-diagnostics"]}
-base64 = "0.21.3"
+base64 = "0.22.0"
 clap = {version = "4.5.0", features = ["derive", "env"]}
 termcolor = "1.4.1"
 ed25519-dalek  = { version = "2", features = ["pem"] }
