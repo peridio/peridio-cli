@@ -5,6 +5,7 @@ use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
 use clap::Parser;
+use peridio_sdk::api::bundles::UpdateBundleParams;
 use peridio_sdk::api::bundles::{CreateBundleParams, GetBundleParams, ListBundlesParams};
 use peridio_sdk::api::Api;
 use peridio_sdk::api::ApiOptions;
@@ -15,6 +16,7 @@ pub enum BundlesCommand {
     Create(Command<CreateCommand>),
     List(Command<ListCommand>),
     Get(Command<GetCommand>),
+    Update(Command<UpdateCommand>),
 }
 
 impl BundlesCommand {
@@ -23,6 +25,7 @@ impl BundlesCommand {
             Self::Create(cmd) => cmd.run(global_options).await,
             Self::List(cmd) => cmd.run(global_options).await,
             Self::Get(cmd) => cmd.run(global_options).await,
+            Self::Update(cmd) => cmd.run(global_options).await,
         }
     }
 }
@@ -37,6 +40,10 @@ pub struct CreateCommand {
     /// The PRN of the organization to create the bundle for.
     #[arg(long)]
     organization_prn: String,
+
+    /// The name of the bundle.
+    #[arg(long)]
+    name: Option<String>,
 }
 
 impl Command<CreateCommand> {
@@ -44,6 +51,7 @@ impl Command<CreateCommand> {
         let params = CreateBundleParams {
             artifact_version_prns: self.inner.artifact_version_prns,
             organization_prn: self.inner.organization_prn,
+            name: self.inner.name,
         };
 
         let api = Api::new(ApiOptions {
@@ -112,6 +120,39 @@ impl Command<GetCommand> {
 
         match api.bundles().get(params).await.context(ApiSnafu)? {
             Some(bundle) => print_json!(&bundle),
+            None => panic!(),
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Parser, Debug)]
+pub struct UpdateCommand {
+    /// The PRN of the resource to update.
+    #[arg(long)]
+    prn: String,
+
+    /// The resource's name, meant to be displayable to users.
+    #[arg(long)]
+    pub name: Option<String>,
+}
+
+impl Command<UpdateCommand> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+        let params = UpdateBundleParams {
+            prn: self.inner.prn,
+            name: self.inner.name,
+        };
+
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
+        });
+
+        match api.bundles().update(params).await.context(ApiSnafu)? {
+            Some(response) => print_json!(&response),
             None => panic!(),
         }
 
