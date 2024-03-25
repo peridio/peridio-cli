@@ -145,6 +145,15 @@ impl CliCommands {
             for missing_argument in missing_arguments.iter() {
                 error.push_str(Some(Style::Success), format!("\t{missing_argument}\r\n"));
             }
+            error.push_str(None, "\r\nThey must be supplied either:\r\n".to_string());
+            error.push_str(
+                None,
+                "\t- via the CLI config file and referenced by profile\r\n".to_string(),
+            );
+            error.push_str(
+                None,
+                "\t- directly to the top level command (not to subcommands)".to_string(),
+            );
             error.print_data_err();
         }
     }
