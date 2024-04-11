@@ -57,6 +57,16 @@ pub struct CreateCommand {
     /// The PRN of the organization you wish to create the resource within.
     #[arg(long)]
     organization_prn: String,
+
+    /// Limits by tags the devices that are allowed to update to this release.
+    /// When phase_mode is tags, this field only allows devices to update to this release if they have at least one of these tags.
+    #[arg(
+        long,
+        conflicts_with = "phase_value",
+        required_unless_present_any = ["phase_value"],
+    )]
+    phase_tags: Option<Vec<String>>,
+
     /// The phase value controls the distribution of the update to your fleet.
     ///
     /// Decimals in [0.0, 1.0] are treated as percents, e.g., to allow 20% of the cohort to update, you would specify 0.2.
@@ -68,8 +78,12 @@ pub struct CreateCommand {
     /// A release with a phase_value not equal to 1 is considered "phased".
     ///
     /// NOTE: There can only ever be a single release that is phased at a time within a cohort. Because of this, if there is already a phased release, it must be "completed" by setting the phase to 1.
-    #[arg(long)]
-    phase_value: f64,
+    #[arg(
+        long,
+        conflicts_with = "phase_tags",
+        required_unless_present_any = ["phase_tags"],
+    )]
+    phase_value: Option<f64>,
     /// The PRN of the release you wish to create this release after.
     ///
     /// If omitted, next_release_prn will dictate where to create this release within the cohort's release graph.
@@ -103,13 +117,22 @@ pub struct CreateCommand {
 
 impl Command<CreateCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+        let (phase_mode, phase_value, phase_tags) = if let Some(phase_tags) = self.inner.phase_tags
+        {
+            ("tags".into(), None, Some(phase_tags))
+        } else {
+            ("numeric".into(), self.inner.phase_value, None)
+        };
+
         let params = CreateReleaseParams {
             bundle_prn: self.inner.bundle_prn,
             cohort_prn: self.inner.cohort_prn,
             description: self.inner.description,
             name: self.inner.name,
             organization_prn: self.inner.organization_prn,
-            phase_value: self.inner.phase_value,
+            phase_mode: Some(phase_mode),
+            phase_tags,
+            phase_value,
             required: self.inner.required,
             schedule_date: self.inner.schedule_date,
             next_release_prn: self.inner.next_release_prn,
@@ -213,6 +236,17 @@ pub struct UpdateCommand {
     #[arg(long)]
     pub next_release_prn: Option<String>,
 
+    /// Enum: "tags" "numeric"
+    ///
+    /// Describes if this release is using tag or numeric based phasing. tags or phase value for resolution
+    /// - tags - Phases rollout of the release according to the phase_tags field.
+    /// - numeric - Phases rollout of the release according to the phase_value field.
+    pub phase_mode: Option<String>,
+
+    /// Limits by tags the devices that are allowed to update to this release.
+    /// When phase_mode is tags, this field only allows devices to update to this release if they have at least one of these tags.
+    pub phase_tags: Option<Vec<String>>,
+
     /// The phase value controls the distribution of the update to your fleet.
     ///
     /// Decimals in [0.0, 1.0] are treated as percents, e.g., to allow 20% of the cohort to update, you would specify 0.2.
@@ -261,6 +295,8 @@ impl Command<UpdateCommand> {
             description: self.inner.description,
             name: self.inner.name,
             next_release_prn: self.inner.next_release_prn,
+            phase_mode: self.inner.phase_mode,
+            phase_tags: self.inner.phase_tags,
             phase_value: self.inner.phase_value,
             required: self.inner.required,
             schedule_date: self.inner.schedule_date,
