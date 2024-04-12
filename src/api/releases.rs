@@ -241,10 +241,12 @@ pub struct UpdateCommand {
     /// Describes if this release is using tag or numeric based phasing. tags or phase value for resolution
     /// - tags - Phases rollout of the release according to the phase_tags field.
     /// - numeric - Phases rollout of the release according to the phase_value field.
+    #[arg(long)]
     pub phase_mode: Option<String>,
 
     /// Limits by tags the devices that are allowed to update to this release.
     /// When phase_mode is tags, this field only allows devices to update to this release if they have at least one of these tags.
+    #[arg(long)]
     pub phase_tags: Option<Vec<String>>,
 
     /// The phase value controls the distribution of the update to your fleet.
