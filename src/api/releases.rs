@@ -64,6 +64,8 @@ pub struct CreateCommand {
         long,
         conflicts_with = "phase_value",
         required_unless_present_any = ["phase_value"],
+        num_args = 0..,
+        value_delimiter = ',',
     )]
     phase_tags: Option<Vec<String>>,
 
@@ -246,7 +248,7 @@ pub struct UpdateCommand {
 
     /// Limits by tags the devices that are allowed to update to this release.
     /// When phase_mode is tags, this field only allows devices to update to this release if they have at least one of these tags.
-    #[arg(long)]
+    #[arg(long, num_args = 0.., value_delimiter = ',')]
     pub phase_tags: Option<Vec<String>>,
 
     /// The phase value controls the distribution of the update to your fleet.

@@ -57,7 +57,7 @@ pub struct CreateCommand {
     name: String,
 
     /// A list of tags that must be present on a device for it to be eligible for this deployment.
-    #[arg(long, required = true)]
+    #[arg(long, required = true, num_args = 0.., value_delimiter = ',')]
     tags: Vec<String>,
 
     /// A SemVer requirement that must be satisfied by a device's version for the device to be eligible for this deployment.
@@ -218,7 +218,7 @@ pub struct UpdateCommand {
     name: Option<String>,
 
     /// A list of tags that must be present on a device for it to be eligible for this deployment.
-    #[arg(long)]
+    #[arg(long, num_args = 0.., value_delimiter = ',')]
     tags: Option<Vec<String>>,
 
     /// A SemVer requirement that must be satisfied by a device's version for the device to be eligible for this deployment.
