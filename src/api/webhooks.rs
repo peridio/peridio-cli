@@ -50,7 +50,7 @@ pub struct CreateCommand {
     /// The events that will trigger the webhook.
     ///
     /// Supply the flag multiple times to add multiple events.
-    #[arg(long)]
+    #[arg(long, num_args = 0.., value_delimiter = ',')]
     enabled_events: Option<Vec<String>>,
     /// The URL that the webhook will send a POST request to.
     #[arg(long)]
@@ -215,7 +215,7 @@ pub struct UpdateCommand {
     /// The events that will trigger the webhook.
     ///
     /// Supply the flag multiple times to add multiple events.
-    #[arg(long)]
+    #[arg(long, num_args = 0.., value_delimiter = ',')]
     pub enabled_events: Option<Vec<String>>,
 }
 

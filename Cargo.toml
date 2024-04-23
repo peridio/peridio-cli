@@ -3,7 +3,7 @@ name = "peridio-cli"
 description = "Peridio CLI"
 homepage = "https://peridio.com"
 repository = "https://github.com/peridio/peridio-cli"
-version = "0.19.1"
+version = "0.19.2"
 edition = "2021"
 
 [dependencies]

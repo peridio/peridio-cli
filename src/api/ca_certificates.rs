@@ -56,7 +56,7 @@ pub struct CreateCommand {
     jitp_description: Option<String>,
 
     /// Tags that will be automatically applied to devices that JITP with this CA certificate.
-    #[arg(long, requires_all = &["jitp_description", "jitp_product_name"])]
+    #[arg(long, requires_all = &["jitp_description", "jitp_product_name"], num_args = 0.., value_delimiter = ',')]
     jitp_tags: Vec<String>,
 
     /// The product that will be automatically applied to devices that JITP with this CA certificate.
@@ -230,7 +230,7 @@ pub struct UpdateCommand {
     jitp_description: Option<String>,
 
     /// Tags that will be automatically applied to devices that JITP with this CA certificate.
-    #[arg(long, requires_all = &["jitp_description", "jitp_product_name"])]
+    #[arg(long, requires_all = &["jitp_description", "jitp_product_name"], num_args = 0.., value_delimiter = ',')]
     jitp_tags: Vec<String>,
 
     /// The product that will be automatically applied to devices that JITP with this CA certificate.
