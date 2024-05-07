@@ -43,6 +43,9 @@ pub struct CreateCommand {
     /// An arbitrary string attached to the resource. Often useful for displaying to users.
     #[arg(long)]
     description: Option<String>,
+    /// If a release is marked as disabled it cannot be resolved during release resolution.
+    #[arg(long)]
+    pub disabled: Option<bool>,
     /// The resource's name, meant to be displayable to users.
     #[arg(long)]
     name: String,
@@ -130,6 +133,7 @@ impl Command<CreateCommand> {
             bundle_prn: self.inner.bundle_prn,
             cohort_prn: self.inner.cohort_prn,
             description: self.inner.description,
+            disabled: self.inner.disabled,
             name: self.inner.name,
             organization_prn: self.inner.organization_prn,
             phase_mode: Some(phase_mode),
@@ -226,6 +230,10 @@ pub struct UpdateCommand {
     #[arg(long)]
     pub description: Option<String>,
 
+    /// If a release is marked as disabled it cannot be resolved during release resolution.
+    #[arg(long)]
+    pub disabled: Option<bool>,
+
     /// The resource's name, meant to be displayable to users.
     #[arg(long)]
     pub name: Option<String>,
@@ -297,6 +305,7 @@ impl Command<UpdateCommand> {
         let params = UpdateReleaseParams {
             prn: self.inner.prn,
             description: self.inner.description,
+            disabled: self.inner.disabled,
             name: self.inner.name,
             next_release_prn: self.inner.next_release_prn,
             phase_mode: self.inner.phase_mode,
