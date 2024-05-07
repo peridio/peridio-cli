@@ -91,7 +91,7 @@ impl Config {
 
             for (profile_name, profile) in config.profiles.iter_mut() {
                 if let Some(credential) = credentials.get(profile_name) {
-                    profile.api_key = credential.api_key.clone();
+                    profile.api_key.clone_from(&credential.api_key);
                 }
             }
 
