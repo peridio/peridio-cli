@@ -81,8 +81,6 @@ pub struct CreateCommand {
     /// NOTE: 1 is a special value in that it represents 100% and once a release is updated to this value, the phase value can never be changed again.
     ///
     /// A release with a phase_value not equal to 1 is considered "phased".
-    ///
-    /// NOTE: There can only ever be a single release that is phased at a time within a cohort. Because of this, if there is already a phased release, it must be "completed" by setting the phase to 1.
     #[arg(
         long,
         conflicts_with = "phase_tags",
@@ -246,12 +244,12 @@ pub struct UpdateCommand {
     #[arg(long)]
     pub next_release_prn: Option<String>,
 
-    /// Enum: "tags" "numeric"
-    ///
     /// Describes if this release is using tag or numeric based phasing. tags or phase value for resolution
+    ///
     /// - tags - Phases rollout of the release according to the phase_tags field.
+    ///
     /// - numeric - Phases rollout of the release according to the phase_value field.
-    #[arg(long)]
+    #[arg(long, value_parser(clap::builder::PossibleValuesParser::new(["tags", "numeric"])))]
     pub phase_mode: Option<String>,
 
     /// Limits by tags the devices that are allowed to update to this release.
@@ -268,8 +266,6 @@ pub struct UpdateCommand {
     /// NOTE: 1 is a special value in that it represents 100% and once a release is updated to this value, the phase value can never be changed again.
     ///
     /// A release with a phase_value not equal to 1 is considered "phased".
-    ///
-    /// NOTE: There can only ever be a single release that is phased at a time within a cohort. Because of this, if there is already a phased release, it must be "completed" by setting the phase to 1.
     #[arg(long)]
     pub phase_value: Option<f64>,
 
