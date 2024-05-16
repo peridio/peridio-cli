@@ -114,8 +114,9 @@ jobs:
       - name: Get dependencies and compile peridio-cloud
         working-directory: ${{ env.PERIDIO_CLOUD_PATH }}
         run: |
+          mix local.hex 2.0.6 --force
           mix deps.get
-          mix compile --warnings-as-error       
+          mix compile --warnings-as-error
       - name: Migrate DB
         working-directory: ${{ env.PERIDIO_CLOUD_PATH }}
         run: mix ecto.migrate

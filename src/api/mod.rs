@@ -17,6 +17,7 @@ mod products;
 mod products_v2;
 mod releases;
 mod signing_keys;
+mod tunnels;
 mod upgrade;
 mod users;
 mod webhooks;
@@ -83,6 +84,8 @@ pub enum ApiCommand {
     #[command(subcommand)]
     SigningKeys(signing_keys::SigningKeysCommand),
     #[command(subcommand)]
+    Tunnels(tunnels::TunnelsCommand),
+    #[command(subcommand)]
     Webhooks(webhooks::WebhooksCommand),
 }
 
@@ -122,6 +125,7 @@ impl CliCommands {
                     ApiCommand::ProductsV2(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Releases(cmd) => cmd.run(global_options).await?,
                     ApiCommand::SigningKeys(cmd) => cmd.run(global_options).await?,
+                    ApiCommand::Tunnels(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Webhooks(cmd) => cmd.run(global_options).await?,
                 }
             }
