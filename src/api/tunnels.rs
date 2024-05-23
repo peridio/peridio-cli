@@ -28,7 +28,6 @@ impl TunnelsCommand {
 }
 
 #[derive(Parser, Debug)]
-
 pub struct CreateCommand {
     /// An optional list of CIDR blocks that can use the resource.
     #[arg(long)]
