@@ -1,6 +1,7 @@
 use super::Command;
 use crate::api::list::ListArgs;
 use crate::print_json;
+use crate::utils::maybe_json;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
@@ -34,6 +35,10 @@ impl ArtifactsCommand {
 #[derive(Parser, Debug)]
 
 pub struct CreateCommand {
+    /// A JSON object that informs the metadata that will be associated with this artifact's binaries when they are included in bundles.
+    #[arg(long)]
+    custom_metadata: Option<String>,
+
     /// An arbitrary string attached to the resource. Often useful for displaying to users.
     #[arg(long)]
     description: Option<String>,
@@ -50,6 +55,7 @@ pub struct CreateCommand {
 impl Command<CreateCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = CreateArtifactParams {
+            custom_metadata: maybe_json(self.inner.custom_metadata),
             description: self.inner.description,
             name: self.inner.name,
             organization_prn: self.inner.organization_prn,
@@ -134,6 +140,10 @@ pub struct UpdateCommand {
     #[arg(long)]
     prn: String,
 
+    /// A JSON object that informs the metadata that will be associated with this artifact's binaries when they are included in bundles.
+    #[arg(long)]
+    pub custom_metadata: Option<String>,
+
     /// An arbitrary string attached to the resource. Often useful for displaying to users.
     #[arg(long)]
     pub description: Option<String>,
@@ -147,6 +157,7 @@ impl Command<UpdateCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = UpdateArtifactParams {
             prn: self.inner.prn,
+            custom_metadata: maybe_json(self.inner.custom_metadata),
             description: self.inner.description,
             name: self.inner.name,
         };
