@@ -1,6 +1,7 @@
 use super::Command;
 use crate::api::list::ListArgs;
 use crate::print_json;
+use crate::utils::maybe_json;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
@@ -68,9 +69,15 @@ pub struct CreateCommand {
     /// The PRN of the artifact version you wish to create a binary for.
     #[arg(long)]
     artifact_version_prn: String,
+
+    /// A JSON object that informs the metadata that will be associated with this binary when it is included in bundles.
+    #[arg(long)]
+    custom_metadata: Option<String>,
+
     /// An arbitrary string attached to the resource. Often useful for displaying to users.
     #[arg(long)]
     description: Option<String>,
+
     /// The base64 encoding of the SHA256 hash of the binary's content.
     #[arg(
         long,
@@ -78,6 +85,7 @@ pub struct CreateCommand {
         required_unless_present = "content_path"
     )]
     hash: Option<String>,
+
     /// The expected size in bytes of the binary.
     #[arg(
         long,
@@ -85,9 +93,11 @@ pub struct CreateCommand {
         required_unless_present = "content_path"
     )]
     size: Option<u64>,
+
     /// An arbitrary string attached to the resource. Often a target triplet to indicate compatibility.
     #[arg(long)]
     target: String,
+
     /// The path to the file you wish to upload as the binary's content.
     #[arg(
         long,
@@ -95,6 +105,7 @@ pub struct CreateCommand {
         required_unless_present_any = ["hash", "size"],
     )]
     content_path: Option<String>,
+
     /// The size to use when creating binary parts. All binary parts will be equal to this size, except the last one which will be less than or equal to this size.
     #[arg(
         long,
@@ -103,9 +114,11 @@ pub struct CreateCommand {
         value_parser = clap::value_parser!(u64).range(5242880..50000000000),
     )]
     binary_part_size: Option<u64>,
+
     /// Limit the concurrency of jobs that create and upload binary parts. [default: 2x the core count, to a maximum of 16]
     #[arg(long, requires = "content_path")]
     concurrency: Option<u8>,
+
     /// The name of a signing key pair in your Peridio CLI config. This will dictate both the private key to create a binary signature with as well as the signing key Peridio will use to verify the binary signature.
     #[arg(
         long,
@@ -115,6 +128,7 @@ pub struct CreateCommand {
         required_unless_present_any = ["signing_key_private", "signing_key_prn"],
     )]
     signing_key_pair: Option<String>,
+
     /// A path to a PKCS#8 private key encoded as a pem to create a binary signature binary with.
     #[arg(
         long,
@@ -123,6 +137,7 @@ pub struct CreateCommand {
         requires = "signing_key_prn"
     )]
     signing_key_private: Option<String>,
+
     /// The PRN of the signing key Peridio will use to verify the binary signature.
     #[arg(
         long,
@@ -131,6 +146,7 @@ pub struct CreateCommand {
         requires = "signing_key_private"
     )]
     signing_key_prn: Option<String>,
+
     /// Create the binary record but do not upload its content nor sign it.
     #[arg(
         long,
@@ -320,6 +336,7 @@ impl CreateCommand {
     ) -> Result<Binary, Error> {
         let command = UpdateCommand {
             prn: binary.prn.clone(),
+            custom_metadata: None,
             description: None,
             state: Some(state),
             api: Some(api.clone()),
@@ -585,6 +602,7 @@ impl CreateCommand {
                 // create the binary
                 let params = CreateBinaryParams {
                     artifact_version_prn: self.artifact_version_prn.clone(),
+                    custom_metadata: maybe_json(self.custom_metadata.clone()),
                     description: self.description.clone(),
                     hash,
                     size,
@@ -609,6 +627,7 @@ impl CreateCommand {
 
         let update_command = UpdateCommand {
             prn: binary.prn.clone(),
+            custom_metadata: None,
             description: None,
             hash: Some(hash),
             size: Some(size),
@@ -723,15 +742,23 @@ pub struct UpdateCommand {
     /// The PRN of the resource you wish to update.
     #[arg(long)]
     prn: String,
+
+    /// A JSON object that informs the metadata that will be associated with this binary when it is included in bundles.
+    #[arg(long)]
+    pub custom_metadata: Option<String>,
+
     /// An arbitrary string attached to the resource. Often useful for displaying to users.
     #[arg(long)]
     pub description: Option<String>,
+
     /// The state to transition the binary to.
     #[arg(long, value_enum)]
     pub state: Option<ArgBinaryState>,
+
     /// The base64 encoding of the SHA256 hash of the binary's content.
     #[arg(long)]
     pub hash: Option<String>,
+
     /// The size of the binary in bytes.
     #[arg(long)]
     pub size: Option<u64>,
@@ -747,6 +774,7 @@ impl UpdateCommand {
     ) -> Result<Option<UpdateBinaryResponse>, Error> {
         let params = UpdateBinaryParams {
             prn: self.prn,
+            custom_metadata: maybe_json(self.custom_metadata),
             description: self.description,
             state: self.state.map(BinaryState::from),
             hash: self.hash,

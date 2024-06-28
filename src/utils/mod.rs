@@ -1,3 +1,4 @@
+use serde_json::{Map, Value};
 use std::io::Write;
 use termcolor::WriteColor;
 
@@ -67,4 +68,15 @@ pub enum Style {
     Success,
     Warning,
     Error,
+}
+
+pub fn maybe_json(data: Option<String>) -> Option<Map<String, Value>> {
+    if let Some(json) = data {
+        match serde_json::from_str(json.as_str()) {
+            Ok(json_data) => Some(json_data),
+            Err(_e) => None,
+        }
+    } else {
+        None
+    }
 }
