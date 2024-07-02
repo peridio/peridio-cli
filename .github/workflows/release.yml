@@ -87,7 +87,7 @@ jobs:
           chmod +x ./target/${{ matrix.target }}/release/peridio-cli
 
           # code sign
-          /usr/bin/codesign -s G6EQB4FDGD --deep -f --timestamp -o runtime ./target/${{ matrix.target }}/release/peridio-cli
+          /usr/bin/codesign -s $APPLE_CODESIGNING_IDENTITY --deep -f --timestamp -o runtime ./target/${{ matrix.target }}/release/peridio-cli
 
           # verify signing
           /usr/bin/codesign --verify --strict ./target/${{ matrix.target }}/release/peridio-cli
