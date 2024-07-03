@@ -1,3 +1,6 @@
+use std::thread::sleep;
+use std::time::{Duration, Instant};
+
 use super::Command;
 use crate::api::list::ListArgs;
 use crate::print_json;
@@ -5,7 +8,10 @@ use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
 use clap::Parser;
-use peridio_sdk::api::tunnels::{CreateTunnelParams, ListTunnelsParams, UpdateTunnelParams};
+use clap_num::number_range;
+use peridio_sdk::api::tunnels::{
+    CreateTunnelParams, GetTunnelParams, ListTunnelsParams, UpdateTunnelParams,
+};
 use peridio_sdk::api::Api;
 use peridio_sdk::api::ApiOptions;
 use snafu::ResultExt;
@@ -13,6 +19,7 @@ use snafu::ResultExt;
 #[derive(Parser, Debug)]
 pub enum TunnelsCommand {
     Create(Command<CreateCommand>),
+    Get(Command<GetCommand>),
     List(Command<ListCommand>),
     Update(Command<UpdateCommand>),
 }
@@ -21,6 +28,7 @@ impl TunnelsCommand {
     pub async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         match self {
             Self::Create(cmd) => cmd.run(global_options).await,
+            Self::Get(cmd) => cmd.run(global_options).await,
             Self::List(cmd) => cmd.run(global_options).await,
             Self::Update(cmd) => cmd.run(global_options).await,
         }
@@ -44,6 +52,14 @@ pub struct CreateCommand {
     /// The length of time in seconds for the tunnel to live.
     #[arg(long)]
     ttl: Option<u16>,
+
+    /// Number of seconds to wait for a state other than "requested" (1..3600)
+    #[arg(long, value_parser=less_than_3600)]
+    wait: Option<u64>,
+}
+
+fn less_than_3600(s: &str) -> Result<u64, String> {
+    number_range(s, 1, 3600)
 }
 
 impl Command<CreateCommand> {
@@ -62,6 +78,72 @@ impl Command<CreateCommand> {
         });
 
         match api.tunnels().create(params).await.context(ApiSnafu)? {
+            Some(response) => {
+                let max_time = self.inner.wait.unwrap_or(0);
+                let now = Instant::now();
+
+                if max_time > 0 {
+                    let mut attempts: u64 = 0;
+
+                    loop {
+                        let sleep_secs = (attempts + 2).pow(2);
+                        attempts += 1;
+
+                        let params = GetTunnelParams {
+                            prn: response.tunnel.prn.clone(),
+                        };
+
+                        match api.tunnels().get(params).await.context(ApiSnafu)? {
+                            Some(response) => {
+                                if response.tunnel.state != "requested" {
+                                    print_json!(&response);
+                                    break;
+                                }
+
+                                let next_sleep_secs = (attempts + 2).pow(2);
+
+                                if now.elapsed().as_secs() + next_sleep_secs > max_time {
+                                    break;
+                                } else {
+                                    sleep(Duration::from_secs(sleep_secs))
+                                }
+                            }
+                            None => panic!(),
+                        }
+                    }
+
+                    print_json!(&response);
+                } else {
+                    print_json!(&response);
+                }
+            }
+            None => panic!(),
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Parser, Debug)]
+pub struct GetCommand {
+    /// The PRN of the resource to get.
+    #[arg(long)]
+    prn: String,
+}
+
+impl Command<GetCommand> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+        let params = GetTunnelParams {
+            prn: self.inner.prn,
+        };
+
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
+        });
+
+        match api.tunnels().get(params).await.context(ApiSnafu)? {
             Some(tunnel) => print_json!(&tunnel),
             None => panic!(),
         }
