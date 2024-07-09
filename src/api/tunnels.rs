@@ -103,6 +103,7 @@ impl Command<CreateCommand> {
                                 let next_sleep_secs = (attempts + 2).pow(2);
 
                                 if now.elapsed().as_secs() + next_sleep_secs > max_time {
+                                    print_json!(&response);
                                     break;
                                 } else {
                                     sleep(Duration::from_secs(sleep_secs))
@@ -111,8 +112,6 @@ impl Command<CreateCommand> {
                             None => panic!(),
                         }
                     }
-
-                    print_json!(&response);
                 } else {
                     print_json!(&response);
                 }
