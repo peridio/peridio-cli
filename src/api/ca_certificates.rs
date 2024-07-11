@@ -59,6 +59,10 @@ pub struct CreateCommand {
     #[arg(long, requires_all = &["jitp_description", "jitp_product_name"], num_args = 0.., value_delimiter = ',')]
     jitp_tags: Vec<String>,
 
+    /// The target that will be automatically applied to devices that JITP with this CA certificate.
+    #[arg(long)]
+    jitp_target: Option<String>,
+
     /// The product that will be automatically applied to devices that JITP with this CA certificate.
     #[arg(long, requires_all = &["jitp_tags", "jitp_description"])]
     jitp_product_name: Option<String>,
@@ -90,6 +94,7 @@ impl Command<CreateCommand> {
             Some(CaCertificateJitp {
                 description,
                 tags: self.inner.jitp_tags,
+                target: self.inner.jitp_target,
                 product_name,
                 cohort_prn: self.inner.jitp_cohort_prn,
             })
@@ -233,6 +238,10 @@ pub struct UpdateCommand {
     #[arg(long, requires_all = &["jitp_description", "jitp_product_name"], num_args = 0.., value_delimiter = ',')]
     jitp_tags: Vec<String>,
 
+    /// The target that will be automatically applied to devices that JITP with this CA certificate.
+    #[arg(long)]
+    jitp_target: Option<String>,
+
     /// The product that will be automatically applied to devices that JITP with this CA certificate.
     #[arg(long, requires_all = &["jitp_tags", "jitp_description"])]
     jitp_product_name: Option<String>,
@@ -255,6 +264,7 @@ impl Command<UpdateCommand> {
             Some(Some(CaCertificateJitp {
                 description,
                 tags: self.inner.jitp_tags,
+                target: self.inner.jitp_target,
                 product_name,
                 cohort_prn: self.inner.jitp_cohort_prn,
             }))
