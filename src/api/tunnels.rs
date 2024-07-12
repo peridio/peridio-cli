@@ -55,11 +55,7 @@ pub struct CreateCommand {
 
     /// Number of seconds to wait for a state other than "requested" (1..3600)
     #[arg(long, value_parser=less_than_3600)]
-    wait: Option<u64>,
-}
-
-fn less_than_3600(s: &str) -> Result<u64, String> {
-    number_range(s, 1, 3600)
+    wait: Option<u16>,
 }
 
 impl Command<CreateCommand> {
@@ -79,7 +75,7 @@ impl Command<CreateCommand> {
 
         match api.tunnels().create(params).await.context(ApiSnafu)? {
             Some(response) => {
-                let max_time = self.inner.wait.unwrap_or(0);
+                let max_time: u64 = self.inner.wait.unwrap_or(0).into();
                 let now = Instant::now();
 
                 if max_time > 0 {
@@ -188,8 +184,24 @@ pub struct UpdateCommand {
     prn: String,
 
     /// The resource's state, currently only supports "closed".
-    #[arg(long)]
+    #[arg(long, value_parser=only_closed)]
     pub state: Option<String>,
+
+    /// Number of seconds to extend the tunnel for (1..3600)
+    #[arg(long, value_parser=less_than_3600)]
+    pub ttl: Option<u16>,
+}
+
+fn less_than_3600(s: &str) -> Result<u16, String> {
+    number_range(s, 1, 3600)
+}
+
+fn only_closed(s: &str) -> Result<String, String> {
+    if s == "closed" {
+        Ok(s.to_string())
+    } else {
+        Err("only accepts \"closed\"".to_string())
+    }
 }
 
 impl Command<UpdateCommand> {
@@ -197,6 +209,7 @@ impl Command<UpdateCommand> {
         let params = UpdateTunnelParams {
             prn: self.inner.prn,
             state: self.inner.state,
+            ttl: self.inner.ttl,
         };
 
         let api = Api::new(ApiOptions {

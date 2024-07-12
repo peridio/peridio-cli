@@ -1066,7 +1066,7 @@ checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
 
 [[package]]
 name = "peridio-cli"
-version = "0.22.1"
+version = "0.23.0"
 dependencies = [
  "assert_cmd",
  "backon",
@@ -1099,7 +1099,7 @@ dependencies = [
 [[package]]
 name = "peridio-sdk"
 version = "0.1.0"
-source = "git+https://github.com/peridio/peridio-rust.git?rev=5d1bc91#5d1bc91c90ec3e5522cce210d5d75fbcf3159b1b"
+source = "git+https://github.com/peridio/peridio-rust.git?rev=133b49b#133b49b7880522fbc9b989eff21db2be201534f8"
 dependencies = [
  "chrono",
  "reqwest",
