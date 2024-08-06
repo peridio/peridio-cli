@@ -37,6 +37,9 @@ sha2 = "0.10.7"
 backon = "0.4.1"
 console = "0.15.7"
 clap-num = "1.1.1"
+rcgen = { version = "0.13.1", features = ["pem", "x509-parser"] }
+time = { version = "0.3.30", features = ["formatting", "parsing", "macros"] }
+x509-parser = "0.16.0"
 
 [dev-dependencies]
 # assert on peridio-cli for integration tests

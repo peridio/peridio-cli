@@ -96,11 +96,29 @@ impl Deref for SigningKeyPairsV2 {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CertificateAuthorityV2 {
+    pub private_key: String,
+    pub certificate: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
+pub struct CertificateAuthoritiesV2(HashMap<String, CertificateAuthorityV2>);
+
+impl Deref for CertificateAuthoritiesV2 {
+    type Target = HashMap<String, CertificateAuthorityV2>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ConfigV2 {
     pub version: u8,
     pub profiles: ProfilesV2,
     pub signing_key_pairs: SigningKeyPairsV2,
+    pub certificate_authorities: CertificateAuthoritiesV2,
 }
 
 impl Default for ConfigV2 {
@@ -109,6 +127,7 @@ impl Default for ConfigV2 {
             version: 2,
             profiles: ProfilesV2::default(),
             signing_key_pairs: SigningKeyPairsV2::default(),
+            certificate_authorities: CertificateAuthoritiesV2::default(),
         }
     }
 }
@@ -123,6 +142,7 @@ impl TryFrom<ConfigV1> for ConfigV2 {
                     version: 1,
                     profiles: profiles_v2,
                     signing_key_pairs: SigningKeyPairsV2::default(),
+                    certificate_authorities: CertificateAuthoritiesV2::default(),
                 };
                 Ok(config_v2)
             }
