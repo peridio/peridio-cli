@@ -13,7 +13,7 @@ use clap::Parser;
 use config::Config;
 use snafu::Snafu;
 
-use crate::config::config_v2::SigningKeyPairsV2;
+use crate::config::config_v2::{CertificateAuthoritiesV2, SigningKeyPairsV2};
 use crate::utils::{Style, StyledStr};
 
 #[macro_export]
@@ -39,17 +39,20 @@ pub enum Error {
     #[snafu(display("Unable to open file {}", source))]
     File { source: io::Error },
 
-    #[snafu(display("File {:?} is empty", path))]
-    EmptyFile { path: path::PathBuf },
-
-    #[snafu(display("Unable to retrieve file metadata {:?}", source))]
-    FileMetadata { source: io::Error },
-
     #[snafu(display("{:?}", path))]
     NonExistingPath {
         path: path::PathBuf,
         source: io::Error,
     },
+
+    #[snafu(display("Failed to create certificate parameters: {}", source))]
+    CertParamsCreation { source: rcgen::Error },
+
+    #[snafu(display("Failed to create certificate: {}", source))]
+    CertificateCreation { source: rcgen::Error },
+
+    #[snafu(display("Failed to parse date: {}", source))]
+    DateParse { source: time::error::Parse },
 }
 
 impl fmt::Debug for Error {
@@ -95,6 +98,9 @@ pub struct GlobalOptions {
 
     #[clap(skip)]
     signing_key_pairs: Option<SigningKeyPairsV2>,
+
+    #[clap(skip)]
+    certificate_authorities: Option<CertificateAuthoritiesV2>,
 }
 
 impl Program {
@@ -113,38 +119,39 @@ impl Program {
         match self.command {
             Command::CliCommand(api::CliCommands::Config(_)) => (),
             _ => {
-                if let (Some(config), Some(profile_name)) = (
-                    Config::parse(&self.global_options.config_directory),
-                    &self.global_options.profile,
-                ) {
-                    if let Ok(profile) = Config::get_profile(&config, profile_name) {
-                        // profile was provided
-                        if self.global_options.api_key.is_none() {
-                            if let Some(api_key) = profile.api_key {
-                                self.global_options.api_key = Some(api_key);
-                            };
-                        }
+                if let Some(config) = Config::parse(&self.global_options.config_directory) {
+                    if let Some(profile_name) = &self.global_options.profile {
+                        if let Ok(profile) = Config::get_profile(&config, profile_name) {
+                            // profile was provided
+                            if self.global_options.api_key.is_none() {
+                                if let Some(api_key) = profile.api_key {
+                                    self.global_options.api_key = Some(api_key);
+                                };
+                            }
 
-                        if self.global_options.base_url.is_none() {
-                            if let Some(base_url) = profile.base_url {
-                                self.global_options.base_url = Some(base_url);
+                            if self.global_options.base_url.is_none() {
+                                if let Some(base_url) = profile.base_url {
+                                    self.global_options.base_url = Some(base_url);
+                                };
                             };
-                        };
 
-                        if self.global_options.ca_path.is_none() {
-                            if let Some(ca_path) = profile.ca_path {
-                                self.global_options.ca_path = Some(ca_path.into());
+                            if self.global_options.ca_path.is_none() {
+                                if let Some(ca_path) = profile.ca_path {
+                                    self.global_options.ca_path = Some(ca_path.into());
+                                };
                             };
-                        };
 
-                        if self.global_options.organization_name.is_none() {
-                            if let Some(organization_name) = profile.organization_name {
-                                self.global_options.organization_name = Some(organization_name);
-                            };
+                            if self.global_options.organization_name.is_none() {
+                                if let Some(organization_name) = profile.organization_name {
+                                    self.global_options.organization_name = Some(organization_name);
+                                };
+                            }
                         }
                     }
 
                     self.global_options.signing_key_pairs = Some(config.signing_key_pairs);
+                    self.global_options.certificate_authorities =
+                        Some(config.certificate_authorities);
                 }
             }
         };

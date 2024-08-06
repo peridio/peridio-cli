@@ -21,6 +21,7 @@ mod tunnels;
 mod upgrade;
 mod users;
 mod webhooks;
+mod x509;
 use crate::utils::Style;
 use crate::utils::StyledStr;
 use crate::GlobalOptions;
@@ -39,12 +40,18 @@ where
 pub enum CliCommands {
     #[command(flatten)]
     ApiCommand(ApiCommand),
+    /// Inspect the calling users's identity
     #[command(subcommand)]
     Users(users::UsersCommand),
+    /// Upgrade the CLI
     #[command()]
     Upgrade(upgrade::UpgradeCommand),
+    /// Manage the CLI's config
     #[command(subcommand)]
     Config(config::ConfigCommand),
+    /// Create X.509 certificates and private keys
+    #[command(subcommand)]
+    X509(x509::X509Command),
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -132,6 +139,7 @@ impl CliCommands {
             CliCommands::Users(cmd) => cmd.run(global_options).await?,
             CliCommands::Upgrade(cmd) => cmd.run().await?,
             CliCommands::Config(cmd) => cmd.run(global_options).await?,
+            CliCommands::X509(cmd) => cmd.run(global_options).await?,
         };
 
         Ok(())
