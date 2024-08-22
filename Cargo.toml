@@ -7,50 +7,50 @@ version = "0.24.0"
 edition = "2021"
 
 [dependencies]
-peridio-sdk = { git = "https://github.com/peridio/peridio-rust.git", rev = "133b49b" }
-serde_json = "1.0"
-snafu = "0.8"
-tokio = { version = "1.36.0", features = ["full"] }
-tower = { version = "0.4" }
+peridio-sdk = { git = "https://github.com/peridio/peridio-rust.git", tag = "0.1.0" }
+serde_json = "1.0.125"
+snafu = "0.8.4"
+tokio = { version = "1.39.3", features = ["full"] }
+tower = { version = "0.5.0" }
 directories = "5.0.1"
-reqwest = { version = "0.11", default-features = false, features = [
+reqwest = { version = "0.12.7", default-features = false, features = [
     "json",
     "rustls-tls",
     "stream",
 ] }
-serde = "1.0.144"
-indicatif = "0.17.0"
-futures-util = "0.3.24"
-flate2 = "1.0.24"
-tar = "0.4.38"
-uuid = { version = "1.7", features = [
+serde = "1.0.208"
+indicatif = "0.17.8"
+futures-util = "0.3.30"
+flate2 = "1.0.32"
+tar = "0.4.41"
+uuid = { version = "1.10.0", features = [
     "v4",
     "v7",
     "fast-rng",
     "macro-diagnostics",
 ] }
-base64 = "0.21.3"
-clap = { version = "4.5.0", features = ["derive", "env"] }
+base64 = "0.22.1"
+clap = { version = "4.5.16", features = ["derive", "env"] }
 termcolor = "1.4.1"
-ed25519-dalek = { version = "2", features = ["pem"] }
-sha2 = "0.10.7"
-backon = "0.4.1"
-console = "0.15.7"
+ed25519-dalek = { version = "2.1.1", features = ["pem"] }
+sha2 = "0.10.8"
+backon = "0.5.0"
+console = "0.15.8"
 clap-num = "1.1.1"
-rcgen = { version = "0.13.1", features = ["pem", "x509-parser"] }
-time = { version = "0.3.30", features = ["formatting", "parsing", "macros"] }
+rcgen = { version = "0.13.1", features = ["aws_lc_rs", "pem", "x509-parser"] }
+time = { version = "0.3.36", features = ["formatting", "parsing", "macros"] }
 x509-parser = "0.16.0"
 
 [dev-dependencies]
 # assert on peridio-cli for integration tests
-assert_cmd = "2.0.13"
+assert_cmd = "2.0.16"
 # indent mix stdout and stderr on failure in tests
 indent = "0.1.1"
 # starting once and cleaning up `mix -S phx.server` for integration tests
 static_init = "1.0.3"
 # predicates for matching peridio-cli output
-predicates = "3.1.0"
+predicates = "3.1.2"
 # parsing JSON output during integration testing
-serde_json = "1.0.113"
+serde_json = "1.0.125"
 # temporary file for integration tests
-tempfile = "3.10"
+tempfile = "3.12.0"
