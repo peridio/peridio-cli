@@ -70,7 +70,7 @@ impl Command<CreateCommand> {
         params.is_ca = if self.inner.is_ca {
             IsCa::Ca(rcgen::BasicConstraints::Unconstrained)
         } else {
-            IsCa::ExplicitNoCa
+            IsCa::NoCa
         };
 
         // authority key identifier
@@ -80,6 +80,12 @@ impl Command<CreateCommand> {
         let mut distinguished_name = DistinguishedName::new();
         distinguished_name.push(DnType::CommonName, self.inner.common_name.clone());
         params.distinguished_name = distinguished_name;
+
+        //  key usages
+        params.key_usages = vec![rcgen::KeyUsagePurpose::DigitalSignature];
+
+        // extended key usages
+        params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ClientAuth];
 
         // validity period
         let start = parse_date(&self.inner.start_date)?;
