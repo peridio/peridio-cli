@@ -30,6 +30,14 @@ jobs:
             target: x86_64-pc-windows-msvc
             suffix: .exe
     steps:
+      - name: install aws-lc-rs build pre-reqs for arm on ubuntu
+        if: ${{ matrix.target == 'aarch64-unknown-linux-musl' }}
+        run: sudo apt-get update && sudo apt-get install -y gcc-multilib
+      - name: install aws-lc-rs build pre-reqs for windows
+        if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
+        run: |
+          choco install nasm -y
+          echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
         with:
