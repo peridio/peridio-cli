@@ -107,33 +107,51 @@ impl CreateCommand {
     ) -> Result<Option<CreateBinarySignatureResponse>, Error> {
         // user provides a signing_key_pair
         let (signing_key_prn, signature) = if let Some(signing_key_pair) = self.signing_key_pair {
-            if let Some(key_pair) = global_options
-                .signing_key_pairs
-                .unwrap()
-                .get(&signing_key_pair)
-            {
-                // first we check for a binary path is provided
-                let signature = if let Some(binary_content_path) = self.binary_content_path {
-                    Self::sign_binary(
-                        key_pair.signing_key_private_path.clone(),
-                        binary_content_path,
-                        self.binary_content_hash.clone(),
-                    )?
-                } else {
-                    // otherwise the user must provide a signature
-                    self.signature.unwrap()
-                };
+            if let Some(signing_key_pairs) = global_options.signing_key_pairs {
+                if let Some(key_pair) = signing_key_pairs.get(&signing_key_pair) {
+                    // first we check for a binary path is provided
+                    let signature = if let Some(binary_content_path) = self.binary_content_path {
+                        Self::sign_binary(
+                            key_pair.signing_key_private_path.clone(),
+                            binary_content_path,
+                            self.binary_content_hash.clone(),
+                        )?
+                    } else {
+                        // otherwise the user must provide a signature
+                        self.signature.unwrap()
+                    };
 
-                (key_pair.signing_key_prn.clone(), signature)
+                    (key_pair.signing_key_prn.clone(), signature)
+                } else {
+                    let mut error = StyledStr::new();
+                    error.push_str(Some(Style::Error), "error: ".to_string());
+                    error.push_str(None, "Config file field ".to_string());
+                    error.push_str(None, "'".to_string());
+                    error.push_str(
+                        Some(Style::Warning),
+                        format!("signing_key_pairs.{signing_key_pair}").to_string(),
+                    );
+                    error.push_str(None, "'".to_string());
+                    error.push_str(
+                        None,
+                        " is unset or null, but is required by the --signing-key-pair option."
+                            .to_string(),
+                    );
+                    error.print_data_err()
+                }
             } else {
                 let mut error = StyledStr::new();
                 error.push_str(Some(Style::Error), "error: ".to_string());
-                error.push_str(None, "Signing Key ".to_string());
+                error.push_str(None, "Config file field ".to_string());
                 error.push_str(None, "'".to_string());
-                error.push_str(Some(Style::Warning), signing_key_pair.to_string());
+                error.push_str(Some(Style::Warning), "signing_key_pairs".to_string());
                 error.push_str(None, "'".to_string());
-                error.push_str(None, " not found.".to_string());
-                error.print_data_err()
+                error.push_str(
+                    None,
+                    " is unset or null, but is required by the --signing-key-pair option."
+                        .to_string(),
+                );
+                error.print_data_err();
             }
         } else if let Some(signing_key_private_path) = self.signing_key_private {
             let binary_content_path = self.binary_content_path.unwrap();

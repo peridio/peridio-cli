@@ -149,9 +149,8 @@ impl Program {
                         }
                     }
 
-                    self.global_options.signing_key_pairs = Some(config.signing_key_pairs);
-                    self.global_options.certificate_authorities =
-                        Some(config.certificate_authorities);
+                    self.global_options.signing_key_pairs = config.signing_key_pairs;
+                    self.global_options.certificate_authorities = config.certificate_authorities;
                 }
             }
         };

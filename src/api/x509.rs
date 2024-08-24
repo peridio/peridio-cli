@@ -98,57 +98,73 @@ impl Command<CreateCommand> {
 
         // signed by or self signed
         let cert = if let Some(signer_name) = self.inner.signer {
-            if let Some(signer) = global_options
-                .certificate_authorities
-                .unwrap()
-                .get(&signer_name)
-            {
-                let signer_key = {
-                    let path = Path::new(&signer.private_key);
-                    if !path.exists() {
-                        return Err(Error::NonExistingPath {
-                            path: path.to_path_buf(),
-                            source: std::io::Error::new(
-                                std::io::ErrorKind::NotFound,
-                                "File not found",
-                            ),
-                        });
-                    }
-                    KeyPair::from_pem(
-                        &fs::read_to_string(path).context(NonExistingPathSnafu { path })?,
-                    )
-                    .context(CertParamsCreationSnafu)?
-                };
+            if let Some(certificate_authorities) = global_options.certificate_authorities {
+                if let Some(signer) = certificate_authorities.get(&signer_name) {
+                    let signer_key = {
+                        let path = Path::new(&signer.private_key);
+                        if !path.exists() {
+                            return Err(Error::NonExistingPath {
+                                path: path.to_path_buf(),
+                                source: std::io::Error::new(
+                                    std::io::ErrorKind::NotFound,
+                                    "File not found",
+                                ),
+                            });
+                        }
+                        KeyPair::from_pem(
+                            &fs::read_to_string(path).context(NonExistingPathSnafu { path })?,
+                        )
+                        .context(CertParamsCreationSnafu)?
+                    };
 
-                let signer_cert_pem = {
-                    let path = Path::new(&signer.certificate);
-                    if !path.exists() {
-                        return Err(Error::NonExistingPath {
-                            path: path.to_path_buf(),
-                            source: std::io::Error::new(
-                                std::io::ErrorKind::NotFound,
-                                "File not found",
-                            ),
-                        });
-                    }
-                    fs::read_to_string(path).context(NonExistingPathSnafu { path })?
-                };
+                    let signer_cert_pem = {
+                        let path = Path::new(&signer.certificate);
+                        if !path.exists() {
+                            return Err(Error::NonExistingPath {
+                                path: path.to_path_buf(),
+                                source: std::io::Error::new(
+                                    std::io::ErrorKind::NotFound,
+                                    "File not found",
+                                ),
+                            });
+                        }
+                        fs::read_to_string(path).context(NonExistingPathSnafu { path })?
+                    };
 
-                let signer_cert = CertificateParams::from_ca_cert_pem(&signer_cert_pem)
-                    .context(CertParamsCreationSnafu)?
-                    .self_signed(&signer_key)
-                    .context(CertificateCreationSnafu)?;
-                params
-                    .signed_by(&key_pair, &signer_cert, &signer_key)
-                    .context(CertificateCreationSnafu)?
+                    let signer_cert = CertificateParams::from_ca_cert_pem(&signer_cert_pem)
+                        .context(CertParamsCreationSnafu)?
+                        .self_signed(&signer_key)
+                        .context(CertificateCreationSnafu)?;
+                    params
+                        .signed_by(&key_pair, &signer_cert, &signer_key)
+                        .context(CertificateCreationSnafu)?
+                } else {
+                    let mut error = StyledStr::new();
+                    error.push_str(Some(Style::Error), "error: ".to_string());
+                    error.push_str(None, "Config file field ".to_string());
+                    error.push_str(None, "'".to_string());
+                    error.push_str(
+                        Some(Style::Warning),
+                        format!("certificate_authorities.{signer_name}").to_string(),
+                    );
+                    error.push_str(None, "'".to_string());
+                    error.push_str(
+                        None,
+                        " is unset or null, but is required by the --signer option.".to_string(),
+                    );
+                    error.print_data_err();
+                }
             } else {
                 let mut error = StyledStr::new();
                 error.push_str(Some(Style::Error), "error: ".to_string());
-                error.push_str(None, "Certificate Authority ".to_string());
+                error.push_str(None, "Config file field ".to_string());
                 error.push_str(None, "'".to_string());
-                error.push_str(Some(Style::Warning), signer_name.to_string());
+                error.push_str(Some(Style::Warning), "certificate_authorities".to_string());
                 error.push_str(None, "'".to_string());
-                error.push_str(None, " not found.".to_string());
+                error.push_str(
+                    None,
+                    " is unset or null, but is required by the --signer option.".to_string(),
+                );
                 error.print_data_err();
             }
         } else if let (Some(signer_key_path), Some(signer_cert_path)) =

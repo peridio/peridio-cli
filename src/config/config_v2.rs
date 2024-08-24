@@ -117,8 +117,8 @@ impl Deref for CertificateAuthoritiesV2 {
 pub struct ConfigV2 {
     pub version: u8,
     pub profiles: ProfilesV2,
-    pub signing_key_pairs: SigningKeyPairsV2,
-    pub certificate_authorities: CertificateAuthoritiesV2,
+    pub signing_key_pairs: Option<SigningKeyPairsV2>,
+    pub certificate_authorities: Option<CertificateAuthoritiesV2>,
 }
 
 impl Default for ConfigV2 {
@@ -126,8 +126,8 @@ impl Default for ConfigV2 {
         ConfigV2 {
             version: 2,
             profiles: ProfilesV2::default(),
-            signing_key_pairs: SigningKeyPairsV2::default(),
-            certificate_authorities: CertificateAuthoritiesV2::default(),
+            signing_key_pairs: Some(SigningKeyPairsV2::default()),
+            certificate_authorities: Some(CertificateAuthoritiesV2::default()),
         }
     }
 }
@@ -141,8 +141,8 @@ impl TryFrom<ConfigV1> for ConfigV2 {
                 let config_v2 = ConfigV2 {
                     version: 1,
                     profiles: profiles_v2,
-                    signing_key_pairs: SigningKeyPairsV2::default(),
-                    certificate_authorities: CertificateAuthoritiesV2::default(),
+                    signing_key_pairs: Some(SigningKeyPairsV2::default()),
+                    certificate_authorities: Some(CertificateAuthoritiesV2::default()),
                 };
                 Ok(config_v2)
             }
