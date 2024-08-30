@@ -44,7 +44,7 @@ pub struct CreateCommand {
         required_unless_present("binary_content_path")
     )]
     pub expected_binary_size: Option<u64>,
-    /// The base64 encoding of the SHA256 hash of the binary part's data.
+    /// The lowercase hex encoding of the SHA256 hash of the binary part's data.
     #[arg(long)]
     pub hash: String,
     /// Uniquely identifies a binary part and defines its position within the binary being created. Can be any number from 1 to 10,000, inclusive. If you create a binary part using the same index that was used with a previous binary part, the previously uploaded binary part is overwritten.
