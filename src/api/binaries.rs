@@ -78,7 +78,7 @@ pub struct CreateCommand {
     #[arg(long)]
     description: Option<String>,
 
-    /// The base64 encoding of the SHA256 hash of the binary's content.
+    /// The lowercase hex encoding of the SHA256 hash of the binary's content.
     #[arg(
         long,
         conflicts_with = "content_path",
@@ -755,7 +755,7 @@ pub struct UpdateCommand {
     #[arg(long, value_enum)]
     pub state: Option<ArgBinaryState>,
 
-    /// The base64 encoding of the SHA256 hash of the binary's content.
+    /// The lowercase hex encoding of the SHA256 hash of the binary's content.
     #[arg(long)]
     pub hash: Option<String>,
 
