@@ -192,6 +192,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33e5b65cc81d81fbb8488f36458ab4771be35a722967bbc959df28b47397e3ff"
 dependencies = [
  "fastrand",
+ "tokio",
 ]
 
 [[package]]
@@ -1357,7 +1358,7 @@ checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
 
 [[package]]
 name = "peridio-cli"
-version = "0.25.1"
+version = "0.25.2"
 dependencies = [
  "assert_cmd",
  "backon",
