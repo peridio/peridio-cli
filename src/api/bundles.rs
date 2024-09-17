@@ -37,6 +37,10 @@ pub struct CreateCommand {
     #[clap(short, long, value_parser, num_args = 1.., value_delimiter = ' ')]
     artifact_version_prns: Vec<String>,
 
+    /// A user provided custom UUID id for the bundle database record.
+    #[arg(long)]
+    id: Option<String>,
+
     /// The PRN of the organization to create the bundle for.
     #[arg(long)]
     organization_prn: String,
@@ -50,6 +54,7 @@ impl Command<CreateCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = CreateBundleParams {
             artifact_version_prns: self.inner.artifact_version_prns,
+            id: self.inner.id,
             organization_prn: self.inner.organization_prn,
             name: self.inner.name,
         };

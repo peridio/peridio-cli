@@ -46,6 +46,10 @@ pub struct CreateCommand {
     #[arg(long)]
     description: Option<String>,
 
+    /// A user provided custom UUID id for the artifact version database record.
+    #[arg(long)]
+    id: Option<String>,
+
     /// The version as a string.
     #[arg(long)]
     version: String,
@@ -57,6 +61,7 @@ impl Command<CreateCommand> {
             artifact_prn: self.inner.artifact_prn,
             custom_metadata: maybe_json(self.inner.custom_metadata),
             description: self.inner.description,
+            id: self.inner.id,
             version: self.inner.version,
         };
 
