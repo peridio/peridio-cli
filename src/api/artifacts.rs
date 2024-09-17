@@ -43,6 +43,10 @@ pub struct CreateCommand {
     #[arg(long)]
     description: Option<String>,
 
+    /// A user provided custom UUID id for the artifact database record.
+    #[arg(long)]
+    id: Option<String>,
+
     /// The resource's name, meant to be displayable to users.
     #[arg(long)]
     name: String,
@@ -57,6 +61,7 @@ impl Command<CreateCommand> {
         let params = CreateArtifactParams {
             custom_metadata: maybe_json(self.inner.custom_metadata),
             description: self.inner.description,
+            id: self.inner.id,
             name: self.inner.name,
             organization_prn: self.inner.organization_prn,
         };

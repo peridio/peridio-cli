@@ -86,6 +86,10 @@ pub struct CreateCommand {
     )]
     hash: Option<String>,
 
+    /// A user provided custom UUID id for the binary database record.
+    #[arg(long)]
+    id: Option<String>,
+
     /// The expected size in bytes of the binary.
     #[arg(
         long,
@@ -605,6 +609,7 @@ impl CreateCommand {
                     custom_metadata: maybe_json(self.custom_metadata.clone()),
                     description: self.description.clone(),
                     hash,
+                    id: self.id.clone(),
                     size,
                     target: self.target.clone(),
                 };
