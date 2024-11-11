@@ -15,26 +15,10 @@ jobs:
       CARGO_NET_GIT_FETCH_WITH_CLI: true
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cargo/registry
-          key: "${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}"
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: "${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}"
-      - uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: check
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Cargo check project
+        run: cargo check
   test:
     runs-on: "${{ matrix.os }}"
     env:
@@ -61,23 +45,9 @@ jobs:
           - os: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cargo/registry
-          key: "${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}"
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: "${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}"
-      - uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
       - name: Checkout peridio/peridio-cloud for integration tests
         uses: actions/checkout@v4
         with:
@@ -85,36 +55,26 @@ jobs:
           ssh-key: ${{ secrets.PERIDIO_CLOUD_DEPLOY_KEY }}
           ref: main
           path: ${{ env.PERIDIO_CLOUD_PATH }}
+
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
         with:
           otp-version: 26.2.1
           elixir-version: 1.16.1
-      - name: Cache deps
-        id: cache-deps
+
+      - name: Restore deps and _build cache
         uses: actions/cache@v4
-        env:
-          cache-name: cache-elixir-deps
         with:
-          path: ${{ env.PERIDIO_CLOUD_PATH }}/deps
-          key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('**/mix.lock') }}
+          path: |
+            ${{ env.PERIDIO_CLOUD_PATH }}/deps
+            ${{ env.PERIDIO_CLOUD_PATH }}/_build
+          key: deps-${{ runner.os }}-${{ hashFiles('**/mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-mix-${{ env.cache-name }}-
-      - name: Cache compiled build
-        id: cache-build
-        uses: actions/cache@v4
-        env:
-          cache-name: cache-compiled-build
-        with:
-          path: ${{ env.PERIDIO_CLOUD_PATH }}/_build
-          key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('**/mix.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-mix-${{ env.cache-name }}-
-            ${{ runner.os }}-mix-
+            deps-${{ runner.os }}
+
       - name: Get dependencies and compile peridio-cloud
         working-directory: ${{ env.PERIDIO_CLOUD_PATH }}
         run: |
-          mix local.hex 2.0.6 --force
           mix deps.get
           mix compile --warnings-as-error
       - name: Migrate DB
@@ -123,65 +83,33 @@ jobs:
       - name: Add hosts to /etc/hosts
         run: |
           sudo echo "127.0.0.1 api.test.peridio.com" | sudo tee -a /etc/hosts
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
+
+      - name: cargo test project
+        run: cargo test
   rustfmt:
     runs-on: ubuntu-latest
     env:
       CARGO_NET_GIT_FETCH_WITH_CLI: true
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          path: ~/.cargo/registry
-          key: "${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}"
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: "${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}"
-      - uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
           components: "rustfmt"
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: "--all -- --check"
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo check fortmat
+        run: cargo fmt --all -- --check
   clippy:
     runs-on: ubuntu-latest
     env:
       CARGO_NET_GIT_FETCH_WITH_CLI: true
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          path: ~/.cargo/registry
-          key: "${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}"
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: "${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}"
-      - uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
           components: "clippy"
-      - uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: "-- -D warnings"
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo check fortmat
+        run: cargo clippy -- -D warnings
   build:
     if: github.event_name == 'push'
     needs:
@@ -192,10 +120,6 @@ jobs:
     runs-on: "${{ matrix.os }}"
     env:
       CARGO_NET_GIT_FETCH_WITH_CLI: true
-      # we make use of llvm to compile into aarch64_unknown_linux_musl
-      CC_aarch64_unknown_linux_musl: clang
-      AR_aarch64_unknown_linux_musl: llvm-ar
-      CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_RUSTFLAGS: "-Clink-self-contained=yes -Clinker=rust-lld"
     strategy:
       matrix:
         include:
@@ -215,44 +139,30 @@ jobs:
             target: x86_64-pc-windows-msvc
             suffix: .exe
     steps:
-      - name: install aws-lc-rs build pre-reqs for arm on ubuntu
-        if: ${{ matrix.target == 'aarch64-unknown-linux-musl' }}
-        run: sudo apt-get update && sudo apt-get install -y gcc-multilib
       - name: install aws-lc-rs build pre-reqs for windows
         if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
         run: |
           choco install nasm -y
           echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          path: ~/.cargo/registry
-          key: "${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}"
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: "${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}"
-      - uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
           target: ${{ matrix.target }}
-      - name: Setup x86_64 musl
-        if: ${{ matrix.target == 'x86_64-unknown-linux-musl'}}
-        run: sudo apt-get install musl-tools -y
-      - name: Setup aarch64 musl
-        if: ${{ matrix.target == 'aarch64-unknown-linux-musl'}}
-        run: sudo apt-get install musl-tools clang llvm -y
-      - uses: actions-rs/cargo@v1
+      - uses: taiki-e/install-action@v2
+        if: ${{ contains(fromJSON('["aarch64-unknown-linux-musl", "x86_64-unknown-linux-musl"]'), matrix.target) }}
         with:
-          command: build
-          args: --release --target ${{ matrix.target }}
+          tool: cross
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo build release
+        if: ${{ !contains(fromJSON('["aarch64-unknown-linux-musl", "x86_64-unknown-linux-musl"]'), matrix.target) }}
+        run: cargo build --release --target ${{ matrix.target }}
+      - name: cross build release
+        if: ${{ contains(fromJSON('["aarch64-unknown-linux-musl", "x86_64-unknown-linux-musl"]'), matrix.target) }}
+        run: cross build --release --target ${{ matrix.target }}
+
       - uses: actions/upload-artifact@v4
         with:
           name: peridio-cli-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/peridio-cli
+          path: target/${{ matrix.target }}/release/peridio-cli${{ matrix.suffix }}
