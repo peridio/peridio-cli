@@ -40,6 +40,7 @@ clap-num = "1.1.1"
 rcgen = { version = "0.13.1", features = ["aws_lc_rs", "pem", "x509-parser"] }
 time = { version = "0.3.36", features = ["formatting", "parsing", "macros"] }
 x509-parser = "0.16.0"
+aws-lc-rs = "1.10.0"
 
 [dev-dependencies]
 # assert on peridio-cli for integration tests
