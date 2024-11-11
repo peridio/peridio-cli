@@ -135,31 +135,29 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
             suffix: ""
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
+          - os: ubuntu-latest
+            target: x86_64-pc-windows-gnu
             suffix: .exe
     steps:
-      - name: install aws-lc-rs build pre-reqs for windows
-        if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
-        run: |
-          choco install nasm -y
-          echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           target: ${{ matrix.target }}
-      - uses: taiki-e/install-action@v2
-        if: ${{ contains(fromJSON('["aarch64-unknown-linux-musl", "x86_64-unknown-linux-musl"]'), matrix.target) }}
+      - name: Install Cross for windows
+        if: ${{ contains(matrix.target, 'windows') }}
+        run: cargo install cross --git https://github.com/cross-rs/cross
+      - name: Install Cross for musl
+        uses: taiki-e/install-action@v2
+        if: ${{ contains(matrix.target, 'musl') }}
         with:
           tool: cross
       - uses: Swatinem/rust-cache@v2
 
       - name: cargo build release
-        if: ${{ !contains(fromJSON('["aarch64-unknown-linux-musl", "x86_64-unknown-linux-musl"]'), matrix.target) }}
+        if: ${{ !(contains(matrix.target, 'musl') || contains(matrix.target, 'windows')) }}
         run: cargo build --release --target ${{ matrix.target }}
       - name: cross build release
-        if: ${{ contains(fromJSON('["aarch64-unknown-linux-musl", "x86_64-unknown-linux-musl"]'), matrix.target) }}
+        if: ${{ contains(matrix.target, 'musl') || contains(matrix.target, 'windows') }}
         run: cross build --release --target ${{ matrix.target }}
 
       - uses: actions/upload-artifact@v4
