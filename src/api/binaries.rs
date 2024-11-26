@@ -71,8 +71,12 @@ pub struct CreateCommand {
     artifact_version_prn: String,
 
     /// A JSON object that informs the metadata that will be associated with this binary when it is included in bundles.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "custom_metadata_path")]
     custom_metadata: Option<String>,
+
+    /// The path to the JSON file value for custom_metadata
+    #[arg(long, conflicts_with = "custom_metadata")]
+    custom_metadata_path: Option<String>,
 
     /// An arbitrary string attached to the resource. Often useful for displaying to users.
     #[arg(long)]
@@ -603,10 +607,21 @@ impl CreateCommand {
 
             _ => {
                 eprintln!("Creating binary...");
+                let custom_metadata =
+                    if let Some(custom_metadata_path) = self.custom_metadata_path.clone() {
+                        fs::read_to_string(&custom_metadata_path)
+                            .context(NonExistingPathSnafu {
+                                path: &custom_metadata_path,
+                            })?
+                            .into()
+                    } else {
+                        self.custom_metadata.clone()
+                    };
+
                 // create the binary
                 let params = CreateBinaryParams {
                     artifact_version_prn: self.artifact_version_prn.clone(),
-                    custom_metadata: maybe_json(self.custom_metadata.clone()),
+                    custom_metadata: maybe_json(custom_metadata),
                     description: self.description.clone(),
                     hash,
                     id: self.id.clone(),
