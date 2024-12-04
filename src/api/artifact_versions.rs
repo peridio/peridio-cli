@@ -2,6 +2,8 @@ use super::Command;
 use crate::api::list::ListArgs;
 use crate::print_json;
 use crate::utils::maybe_json;
+use crate::utils::PRNType;
+use crate::utils::PRNValueParser;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
@@ -35,7 +37,10 @@ impl ArtifactVersionsCommand {
 #[derive(Parser, Debug)]
 pub struct CreateCommand {
     /// The PRN of the artifact you wish to create a version for.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Artifact)
+    )]
     artifact_prn: String,
 
     /// A JSON object that informs the metadata that will be associated with this artifact version's binaries when they are included in bundles.
@@ -123,7 +128,10 @@ impl Command<ListCommand> {
 #[derive(Parser, Debug)]
 pub struct GetCommand {
     /// The PRN of the resource to get.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::ArtifactVersion)
+    )]
     prn: String,
 }
 
@@ -156,7 +164,10 @@ impl Command<GetCommand> {
 #[derive(Parser, Debug)]
 pub struct UpdateCommand {
     /// The PRN of the resource to update.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::ArtifactVersion)
+    )]
     prn: String,
 
     /// A JSON object that informs the metadata that will be associated with this artifact version's binaries when they are included in bundles.

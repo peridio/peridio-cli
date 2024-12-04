@@ -3,6 +3,8 @@ use std::io;
 
 use super::Command;
 use crate::print_json;
+use crate::utils::PRNType;
+use crate::utils::PRNValueParser;
 use crate::utils::Style;
 use crate::utils::StyledStr;
 use crate::ApiSnafu;
@@ -40,7 +42,11 @@ impl BinarySignaturesCommand {
 #[derive(Parser, Debug)]
 pub struct CreateCommand {
     /// The PRN of the binary to create a binary signature for.
-    #[arg(long, short = 'b')]
+    #[arg(
+        long,
+        short = 'b',
+        value_parser = PRNValueParser::new(PRNType::Binary)
+    )]
     pub binary_prn: String,
     /// The path of the file to automatically create a signature for. If you instead want to compute and provide the signature yourself, use the --signature option.
     #[arg(
@@ -89,7 +95,8 @@ pub struct CreateCommand {
     #[arg(
         long,
         conflicts_with = "signing_key_pair",
-        required_unless_present = "signing_key_pair"
+        required_unless_present = "signing_key_pair",
+        value_parser = PRNValueParser::new(PRNType::SigningKey)
     )]
     pub signing_key_prn: Option<String>,
 
@@ -228,7 +235,10 @@ impl Command<CreateCommand> {
 #[derive(Parser, Debug)]
 pub struct DeleteCommand {
     /// The PRN of the resource to delete.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::BinarySignature)
+    )]
     binary_signature_prn: String,
 }
 

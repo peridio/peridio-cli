@@ -1,6 +1,8 @@
 use super::Command;
 use crate::api::list::ListArgs;
 use crate::print_json;
+use crate::utils::PRNType;
+use crate::utils::PRNValueParser;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
@@ -44,7 +46,10 @@ pub struct CreateCommand {
     name: String,
 
     /// The PRN of the organization you wish to create the resource within.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Organization)
+    )]
     organization_prn: String,
 }
 
@@ -104,7 +109,10 @@ impl Command<ListCommand> {
 #[derive(Parser, Debug)]
 pub struct GetCommand {
     /// The PRN of the resource to get.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Product)
+    )]
     prn: String,
 }
 
@@ -132,7 +140,10 @@ impl Command<GetCommand> {
 #[derive(Parser, Debug)]
 pub struct UpdateCommand {
     /// The PRN of the resource to update.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Product)
+    )]
     prn: String,
     /// The resource's name, meant to be displayable to users.
     #[arg(long)]

@@ -1,4 +1,5 @@
 use super::Command;
+use crate::utils::{PRNType, PRNValueParser};
 use crate::{print_json, ApiSnafu, Error, GlobalOptions, NonExistingPathSnafu};
 use base64::{engine::general_purpose, Engine as _};
 use clap::Parser;
@@ -68,7 +69,10 @@ pub struct CreateCommand {
     jitp_product_name: Option<String>,
 
     /// The cohort that will be automatically applied to devices that JITP with this CA certificate.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Cohort)
+    )]
     jitp_cohort_prn: Option<String>,
 }
 
@@ -247,7 +251,10 @@ pub struct UpdateCommand {
     jitp_product_name: Option<String>,
 
     /// The cohort that will be automatically applied to devices that JITP with this CA certificate.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Cohort)
+    )]
     jitp_cohort_prn: Option<String>,
 }
 

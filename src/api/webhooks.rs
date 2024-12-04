@@ -1,6 +1,8 @@
 use super::Command;
 use crate::api::list::ListArgs;
 use crate::print_json;
+use crate::utils::PRNType;
+use crate::utils::PRNValueParser;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
@@ -56,7 +58,10 @@ pub struct CreateCommand {
     #[arg(long)]
     url: String,
     /// The PRN of the organization you wish to create the resource within.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Organization)
+    )]
     organization_prn: String,
 }
 
@@ -117,7 +122,10 @@ impl Command<ListCommand> {
 #[derive(Parser, Debug)]
 pub struct GetCommand {
     /// The PRN of the resource to get.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Webhook)
+    )]
     prn: String,
 }
 
@@ -201,7 +209,10 @@ impl Command<TestFireCommand> {
 #[derive(Parser, Debug)]
 pub struct UpdateCommand {
     /// The PRN of the resource to update.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Webhook)
+    )]
     prn: String,
     /// An arbitrary string attached to the resource. Often useful for displaying to users.
     #[arg(long)]
@@ -247,7 +258,10 @@ impl Command<UpdateCommand> {
 #[derive(Parser, Debug)]
 pub struct DeleteCommand {
     /// The PRN of the resource to delete.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Webhook)
+    )]
     webhook_prn: String,
 }
 

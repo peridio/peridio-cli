@@ -3,6 +3,8 @@ use std::fs;
 use super::Command;
 use crate::api::list::ListArgs;
 use crate::print_json;
+use crate::utils::PRNType;
+use crate::utils::PRNValueParser;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
@@ -56,7 +58,10 @@ pub struct CreateCommand {
     #[arg(long)]
     name: String,
     /// The PRN of the organization you wish to create the resource within.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Organization)
+    )]
     organization_prn: String,
     /// The path to the public key raw file.
     #[arg(
@@ -122,7 +127,10 @@ impl Command<CreateCommand> {
 #[derive(Parser, Debug)]
 pub struct GetCommand {
     /// The PRN of the resource to get.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::SigningKey)
+    )]
     prn: String,
 }
 
@@ -180,7 +188,10 @@ impl Command<ListCommand> {
 #[derive(Parser, Debug)]
 pub struct DeleteCommand {
     /// The PRN of the resource to delete.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::SigningKey)
+    )]
     signing_key_prn: String,
 }
 

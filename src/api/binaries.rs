@@ -2,6 +2,8 @@ use super::Command;
 use crate::api::list::ListArgs;
 use crate::print_json;
 use crate::utils::maybe_json;
+use crate::utils::PRNType;
+use crate::utils::PRNValueParser;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
@@ -67,7 +69,10 @@ impl BinariesCommand {
 #[derive(Parser, Debug)]
 pub struct CreateCommand {
     /// The PRN of the artifact version you wish to create a binary for.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::ArtifactVersion)
+    )]
     artifact_version_prn: String,
 
     /// A JSON object that informs the metadata that will be associated with this binary when it is included in bundles.
@@ -129,7 +134,7 @@ pub struct CreateCommand {
         short = 's',
         conflicts_with = "signing_key_private",
         conflicts_with = "signing_key_prn",
-        required_unless_present_any = ["signing_key_private", "signing_key_prn"],
+        required_unless_present_any = ["signing_key_private", "signing_key_prn", "skip_upload"],
     )]
     signing_key_pair: Option<String>,
 
@@ -137,7 +142,7 @@ pub struct CreateCommand {
     #[arg(
         long,
         conflicts_with = "signing_key_pair",
-        required_unless_present = "signing_key_pair",
+        required_unless_present_any = ["signing_key_pair", "skip_upload"],
         requires = "signing_key_prn"
     )]
     signing_key_private: Option<String>,
@@ -146,8 +151,9 @@ pub struct CreateCommand {
     #[arg(
         long,
         conflicts_with = "signing_key_pair",
-        required_unless_present = "signing_key_pair",
-        requires = "signing_key_private"
+        required_unless_present_any = ["signing_key_pair", "skip_upload"],
+        requires = "signing_key_private",
+        value_parser = PRNValueParser::new(PRNType::SigningKey)
     )]
     signing_key_prn: Option<String>,
 
@@ -706,7 +712,10 @@ impl Command<ListCommand> {
 #[derive(Parser, Debug)]
 pub struct GetCommand {
     /// The PRN of the resource to get.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Binary)
+    )]
     prn: String,
 
     #[clap(skip)]
@@ -745,7 +754,10 @@ impl Command<GetCommand> {
 #[derive(Parser, Debug)]
 pub struct UpdateCommand {
     /// The PRN of the resource you wish to update.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Binary)
+    )]
     prn: String,
 
     /// A JSON object that informs the metadata that will be associated with this binary when it is included in bundles.

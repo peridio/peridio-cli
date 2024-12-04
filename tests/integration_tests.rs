@@ -311,7 +311,7 @@ fn require_env_var(name: &str) -> String {
     env::var(name).unwrap_or_else(|_| panic!("{} is not set", name))
 }
 
-const HOST: &'static str = "api.test.peridio.com";
+const HOST: &str = "api.test.peridio.com";
 const PORT: u16 = 4002;
 #[dynamic(lazy, drop)]
 static mut PERIDIO_CLOUD_API: PeridioCloudAPI = PeridioCloudAPI::new();

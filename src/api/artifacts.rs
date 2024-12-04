@@ -2,6 +2,8 @@ use super::Command;
 use crate::api::list::ListArgs;
 use crate::print_json;
 use crate::utils::maybe_json;
+use crate::utils::PRNType;
+use crate::utils::PRNValueParser;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
@@ -52,7 +54,10 @@ pub struct CreateCommand {
     name: String,
 
     /// The PRN of the organization you wish to create the resource within.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Organization)
+    )]
     organization_prn: String,
 }
 
@@ -114,7 +119,10 @@ impl Command<ListCommand> {
 #[derive(Parser, Debug)]
 pub struct GetCommand {
     /// The PRN of the resource to get.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Artifact)
+    )]
     prn: String,
 }
 
@@ -142,7 +150,10 @@ impl Command<GetCommand> {
 #[derive(Parser, Debug)]
 pub struct UpdateCommand {
     /// The PRN of the resource to update.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Artifact)
+    )]
     prn: String,
 
     /// A JSON object that informs the metadata that will be associated with this artifact's binaries when they are included in bundles.

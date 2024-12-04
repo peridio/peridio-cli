@@ -1,6 +1,8 @@
 use super::Command;
 use crate::api::list::ListArgs;
 use crate::print_json;
+use crate::utils::PRNType;
+use crate::utils::PRNValueParser;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
@@ -35,10 +37,16 @@ impl ReleasesCommand {
 
 pub struct CreateCommand {
     /// The PRN of the bundle you wish to release.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Bundle)
+    )]
     bundle_prn: String,
     /// The PRN of the cohort you wish to create a release within.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Cohort)
+    )]
     cohort_prn: String,
     /// An arbitrary string attached to the resource. Often useful for displaying to users.
     #[arg(long)]
@@ -55,10 +63,16 @@ pub struct CreateCommand {
     /// If omitted, the release will be created as latest within the cohort. If there is already at least one release in the cohort, then the latest release in that cohort would have its next_release_prn updated to this created release.
     ///
     /// If supplied, the release will be created prior to the release identified by next_release_prn. If you wish to insert this release between two other releases, you may additionally supply previous_release_prn. If you supply neither field, it will create the release as the latest automatically.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Release)
+    )]
     next_release_prn: Option<String>,
     /// The PRN of the organization you wish to create the resource within.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Organization)
+    )]
     organization_prn: String,
 
     /// Limits by tags the devices that are allowed to update to this release.
@@ -92,7 +106,10 @@ pub struct CreateCommand {
     /// If omitted, next_release_prn will dictate where to create this release within the cohort's release graph.
     ///
     /// In order to insert a release between two other releases, next_release_prn is required to be supplied as well. If you supply neither field, it will create the release as the latest automatically.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Release)
+    )]
     previous_release_prn: Option<String>,
     /// Whether the release is required.
     ///
@@ -193,7 +210,10 @@ impl Command<ListCommand> {
 #[derive(Parser, Debug)]
 pub struct GetCommand {
     /// The PRN of the resource to get.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Release)
+    )]
     prn: String,
 }
 
@@ -221,7 +241,10 @@ impl Command<GetCommand> {
 #[derive(Parser, Debug)]
 pub struct UpdateCommand {
     /// The PRN of the resource to update.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Release)
+    )]
     pub prn: String,
 
     /// An arbitrary string attached to the resource. Often useful for displaying to users.
@@ -241,7 +264,10 @@ pub struct UpdateCommand {
     /// If omitted, the release will be created as latest within the cohort. If there is already at least one release in the cohort, then the latest release in that cohort would have its next_release_prn updated to this created release.
     ///
     /// If supplied, the release will be created prior to the release identified by next_release_prn. If you wish to insert this release between two other releases, you may additionally supply previous_release_prn. If you supply neither field, it will create the release as the latest automatically.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Release)
+    )]
     pub next_release_prn: Option<String>,
 
     /// Describes if this release is using tag or numeric based phasing. tags or phase value for resolution
