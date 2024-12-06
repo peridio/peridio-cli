@@ -216,8 +216,8 @@ impl Command<CreateCommand> {
         fs::create_dir_all(&out_dir).unwrap();
         let cert_filename = format!("{}-certificate.pem", self.inner.common_name);
         let key_filename = format!("{}-private-key.pem", self.inner.common_name);
-        fs::write(out_dir.join(cert_filename.clone()), &cert_pem).unwrap();
-        fs::write(out_dir.join(key_filename.clone()), &key_pem).unwrap();
+        fs::write(out_dir.join(cert_filename.clone()), cert_pem).unwrap();
+        fs::write(out_dir.join(key_filename.clone()), key_pem).unwrap();
 
         print_json!(&json!({
             "certificate": out_dir.join(cert_filename),

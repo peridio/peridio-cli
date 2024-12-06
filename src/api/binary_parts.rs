@@ -1,5 +1,7 @@
 use super::Command;
 use crate::print_json;
+use crate::utils::PRNType;
+use crate::utils::PRNValueParser;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
@@ -35,7 +37,10 @@ impl BinaryPartsCommand {
 #[derive(Parser, Debug)]
 pub struct CreateCommand {
     /// The PRN of the binary you wish to create a part for.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Binary)
+    )]
     pub binary_prn: String,
     /// The total size of the binary's content.
     #[arg(
@@ -112,7 +117,10 @@ impl Command<CreateCommand> {
 
 #[derive(Parser, Debug)]
 pub struct ListCommand {
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Binary)
+    )]
     pub binary_prn: String,
 
     #[clap(skip)]

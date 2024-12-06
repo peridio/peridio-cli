@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 use super::Command;
 use crate::api::list::ListArgs;
 use crate::print_json;
+use crate::utils::{PRNType, PRNValueParser};
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
@@ -42,7 +43,10 @@ pub struct CreateCommand {
     cidr_block_allowlist: Option<Vec<String>>,
 
     /// The PRN of the device you wish to create the resource for.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Device)
+    )]
     device_prn: String,
 
     /// The port of the device that being used for the service.
@@ -122,7 +126,10 @@ impl Command<CreateCommand> {
 #[derive(Parser, Debug)]
 pub struct GetCommand {
     /// The PRN of the resource to get.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Tunnel)
+    )]
     prn: String,
 }
 
@@ -180,7 +187,10 @@ impl Command<ListCommand> {
 #[derive(Parser, Debug)]
 pub struct UpdateCommand {
     /// The PRN of the resource to update.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Tunnel)
+    )]
     prn: String,
 
     /// The resource's state, currently only supports "closed".

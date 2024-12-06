@@ -2,6 +2,8 @@ use std::fs;
 
 use super::Command;
 use crate::print_json;
+use crate::utils::PRNType;
+use crate::utils::PRNValueParser;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
@@ -73,7 +75,10 @@ pub struct CreateCommand {
     target: Option<String>,
 
     /// The PRN of the cohort you wish to add the device to.
-    #[arg(long)]
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Cohort)
+    )]
     cohort_prn: Option<String>,
 }
 
