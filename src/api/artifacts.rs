@@ -1,3 +1,5 @@
+use std::fs;
+
 use super::Command;
 use crate::api::list::ListArgs;
 use crate::print_json;
@@ -5,6 +7,7 @@ use crate::utils::maybe_json;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
+use crate::NonExistingPathSnafu;
 use clap::Parser;
 use peridio_sdk::api::artifacts::{
     CreateArtifactParams, GetArtifactParams, ListArtifactsParams, UpdateArtifactParams,
@@ -36,8 +39,12 @@ impl ArtifactsCommand {
 
 pub struct CreateCommand {
     /// A JSON object that informs the metadata that will be associated with this artifact's binaries when they are included in bundles.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "custom_metadata_path")]
     custom_metadata: Option<String>,
+
+    /// The path to the JSON file value for custom_metadata
+    #[arg(long, conflicts_with = "custom_metadata")]
+    custom_metadata_path: Option<String>,
 
     /// An arbitrary string attached to the resource. Often useful for displaying to users.
     #[arg(long)]
@@ -58,8 +65,18 @@ pub struct CreateCommand {
 
 impl Command<CreateCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+        let custom_metadata = if let Some(custom_metadata_path) = self.inner.custom_metadata_path {
+            fs::read_to_string(&custom_metadata_path)
+                .context(NonExistingPathSnafu {
+                    path: &custom_metadata_path,
+                })?
+                .into()
+        } else {
+            self.inner.custom_metadata
+        };
+
         let params = CreateArtifactParams {
-            custom_metadata: maybe_json(self.inner.custom_metadata),
+            custom_metadata: maybe_json(custom_metadata),
             description: self.inner.description,
             id: self.inner.id,
             name: self.inner.name,
