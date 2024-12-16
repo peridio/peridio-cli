@@ -140,32 +140,6 @@ fn base_address() -> SocketAddr {
     (HOST, PORT).to_socket_addrs().unwrap().next().unwrap()
 }
 
-fn peridio_cloud_api_path() -> PathBuf {
-    let path = peridio_cloud_path().join("apps/peridio_cloud_api");
-
-    if path.is_dir() {
-        path
-    } else {
-        panic!(
-            "peridio_cloud_api path ({}) is not a directory",
-            path.to_str().unwrap()
-        )
-    }
-}
-
-fn peridio_cloud_core_path() -> PathBuf {
-    let path = peridio_cloud_path().join("apps/peridio_cloud_core");
-
-    if path.is_dir() {
-        path
-    } else {
-        panic!(
-            "peridio_cloud_core path ({}) is not a directory",
-            path.to_str().unwrap()
-        )
-    }
-}
-
 fn peridio_cloud_certificate_authority_path() -> PathBuf {
     peridio_cloud_certificate_authority_directory_path().join("ca.pem")
 }
@@ -281,14 +255,14 @@ impl User {
 
 fn peridio_cloud_api_mix_command() -> std::process::Command {
     let mut command = mix_command();
-    command.current_dir(peridio_cloud_api_path());
+    command.args(["cmd", "--app", "peridio_cloud_api", "mix"]);
 
     command
 }
 
 fn peridio_cloud_core_mix_command() -> std::process::Command {
     let mut command = mix_command();
-    command.current_dir(peridio_cloud_core_path());
+    command.args(["cmd", "--app", "peridio_cloud_core", "mix"]);
 
     command
 }
@@ -299,7 +273,7 @@ fn mix_command() -> std::process::Command {
     require_env_var("DATABASE_URL");
 
     command
-        .current_dir(peridio_cloud_api_path())
+        .current_dir(peridio_cloud_path())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
