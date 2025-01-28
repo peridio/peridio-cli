@@ -1,3 +1,5 @@
+pub mod serde_introspection;
+
 use clap::error::{ContextKind, ContextValue, ErrorKind};
 use serde_json::{Map, Value};
 use std::io::Write;
@@ -286,3 +288,76 @@ impl clap::builder::TypedValueParser for PRNValueParser {
         Ok(value)
     }
 }
+
+// #[derive(Clone, Debug)]
+// pub enum ExpandResult {
+//     All,
+//     Fields(Vec<String>),
+// }
+
+// #[derive(Clone, Debug)]
+// pub struct ExpandValueParser<E: DeserializeOwned + Clone + Send + Sync + 'static>(
+//     std::marker::PhantomData<E>,
+// );
+
+// impl<E: DeserializeOwned + Clone + Send + Sync + 'static> ExpandValueParser<E> {
+//     pub fn new() -> Self {
+//         let phantom: std::marker::PhantomData<E> = Default::default();
+//         Self(phantom)
+//     }
+// }
+
+// impl<E: DeserializeOwned + Clone + Send + Sync + 'static> TypedValueParser
+//     for ExpandValueParser<E>
+// {
+//     type Value = ExpandResult;
+
+//     fn parse_ref(
+//         &self,
+//         cmd: &clap::Command,
+//         arg: Option<&clap::Arg>,
+//         value: &std::ffi::OsStr,
+//     ) -> Result<Self::Value, clap::Error> {
+//         let value = value.to_str().unwrap();
+
+//         let result = match value {
+//             "" => ExpandResult::All,
+//             value => {
+//                 let values: HashSet<String> = value.split(',').map(|x| x.to_string()).collect();
+
+//                 let struct_fields: HashSet<String> = serde_introspect::<E>()
+//                     .iter()
+//                     .map(|x| x.to_string())
+//                     .collect();
+
+//                 // a provided field is not part of the struct
+//                 if !values.is_subset(&struct_fields) {
+//                     let diff: Vec<String> = struct_fields
+//                         .difference(&values)
+//                         .map(|x| x.to_string())
+//                         .collect();
+//                     let error_fields = diff.join(",");
+
+//                     let mut err = clap::Error::new(ErrorKind::ValueValidation).with_cmd(cmd);
+//                     if let Some(arg) = arg {
+//                         err.insert(
+//                             ContextKind::InvalidArg,
+//                             ContextValue::String(arg.to_string()),
+//                         );
+//                     }
+//                     err.insert(
+//                         ContextKind::InvalidValue,
+//                         ContextValue::String(error_fields),
+//                     );
+//                     return Err(err);
+//                 }
+
+//                 let result = values.into_iter().collect();
+
+//                 ExpandResult::Fields(result)
+//             }
+//         };
+
+//         Ok(result)
+//     }
+// }
