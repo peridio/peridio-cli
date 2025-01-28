@@ -9,6 +9,7 @@ use crate::Error;
 use crate::GlobalOptions;
 use base64::{engine::general_purpose, Engine as _};
 use clap::Parser;
+use peridio_sdk::api::devices::GetUpdateDeviceParams;
 use peridio_sdk::api::devices::{
     AuthenticateDeviceParams, CreateDeviceParams, DeleteDeviceParams, GetDeviceParams,
     ListDeviceParams, UpdateDeviceParams,
@@ -25,6 +26,7 @@ pub enum DevicesCommand {
     Get(Command<GetCommand>),
     List(Command<ListCommand>),
     Update(Command<UpdateCommand>),
+    GetUpdate(Command<GetUpdateCommand>),
 }
 
 impl DevicesCommand {
@@ -36,6 +38,7 @@ impl DevicesCommand {
             Self::Get(cmd) => cmd.run(global_options).await,
             Self::List(cmd) => cmd.run(global_options).await,
             Self::Update(cmd) => cmd.run(global_options).await,
+            Self::GetUpdate(cmd) => cmd.run(global_options).await,
         }
     }
 }
@@ -312,6 +315,60 @@ impl Command<AuthenticateCommand> {
 
         match api.devices().authenticate(params).await.context(ApiSnafu)? {
             Some(device) => print_json!(&device),
+            None => panic!(),
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Parser, Debug)]
+pub struct GetUpdateCommand {
+    /// The PRN of the device you wish to get its update.
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Device)
+    )]
+    device_prn: String,
+
+    /// The PRN of the device's current release.
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Release),
+        required_unless_present_any = ["bundle_prn", "release_version"]
+    )]
+    release_prn: Option<String>,
+
+    /// The PRN of the device's current bundle.
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Bundle),
+        required_unless_present_any = ["release_prn", "release_version"]
+    )]
+    bundle_prn: Option<String>,
+
+    /// The release version as starting point for release resolution.
+    #[arg(long, required_unless_present_any = ["release_prn", "bundle_prn"])]
+    release_version: Option<String>,
+}
+
+impl Command<GetUpdateCommand> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+        let params = GetUpdateDeviceParams {
+            device_prn: self.inner.device_prn,
+            release_prn: self.inner.release_prn,
+            bundle_prn: self.inner.bundle_prn,
+            release_version: self.inner.release_version,
+        };
+
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
+        });
+
+        match api.devices().get_update(params).await.context(ApiSnafu)? {
+            Some(device_update) => print_json!(&device_update),
             None => panic!(),
         }
 
