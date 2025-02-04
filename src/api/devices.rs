@@ -324,14 +324,14 @@ impl Command<AuthenticateCommand> {
 
 #[derive(Parser, Debug)]
 pub struct GetUpdateCommand {
-    /// The PRN of the device you wish to get its update.
+    /// The PRN of the device you wish to check for an update for.
     #[arg(
         long,
         value_parser = PRNValueParser::new(PRNType::Device)
     )]
     device_prn: String,
 
-    /// The PRN of the device's current release.
+    /// The PRN of the release to consider as the device's current release during bundle resolution.
     #[arg(
         long,
         value_parser = PRNValueParser::new(PRNType::Release),
@@ -339,7 +339,7 @@ pub struct GetUpdateCommand {
     )]
     release_prn: Option<String>,
 
-    /// The PRN of the device's current bundle.
+    /// The PRN of the bundle to consider as the device's current bundle during bundle resolution.
     #[arg(
         long,
         value_parser = PRNValueParser::new(PRNType::Bundle),
@@ -347,9 +347,13 @@ pub struct GetUpdateCommand {
     )]
     bundle_prn: Option<String>,
 
-    /// The release version as starting point for release resolution.
+    /// The version to consider as the device's current release version during bundle resolution.
     #[arg(long, required_unless_present_any = ["release_prn", "bundle_prn"])]
     release_version: Option<String>,
+
+    /// Whether the server's record of what the device's current state is will be updated in reaction to the release PRN, bundle PRN, and release version parameters if they are also supplied.
+    #[arg(long, default_value = "false")]
+    write: bool,
 }
 
 impl Command<GetUpdateCommand> {
@@ -359,6 +363,7 @@ impl Command<GetUpdateCommand> {
             release_prn: self.inner.release_prn,
             bundle_prn: self.inner.bundle_prn,
             release_version: self.inner.release_version,
+            write: self.inner.write,
         };
 
         let api = Api::new(ApiOptions {
