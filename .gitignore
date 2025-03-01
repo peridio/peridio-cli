@@ -1,4 +1,5 @@
 /target
 
 .envrc
+.vscode
 dev.env
