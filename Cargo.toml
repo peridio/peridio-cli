@@ -7,7 +7,7 @@ version = "0.28.1"
 edition = "2021"
 
 [dependencies]
-peridio-sdk = { git = "https://github.com/peridio/peridio-rust.git", tag = "0.3.1" }
+peridio-sdk = { git = "https://github.com/peridio/peridio-rust.git", tag = "0.3.2" }
 serde_json = "1.0.125"
 snafu = "0.8.4"
 tokio = { version = "1.39.3", features = ["full"] }
@@ -34,7 +34,7 @@ clap = { version = "4.5.16", features = ["derive", "env"] }
 termcolor = "1.4.1"
 ed25519-dalek = { version = "2.1.1", features = ["pem"] }
 sha2 = "0.10.8"
-backon = {version = "0.5.0", features = ["tokio-sleep"]}
+backon = { version = "0.5.0", features = ["tokio-sleep"] }
 console = "0.15.8"
 clap-num = "1.1.1"
 rcgen = { version = "0.13.1", features = ["aws_lc_rs", "pem", "x509-parser"] }
