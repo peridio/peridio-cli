@@ -23,7 +23,7 @@ impl StyledStr {
         }
     }
 
-    pub fn print_err(&self) -> std::io::Result<()> {
+    pub fn print_msg(&self) -> std::io::Result<()> {
         let bufwtr = termcolor::BufferWriter::stderr(termcolor::ColorChoice::Always);
         let mut buffer = bufwtr.buffer();
 
@@ -54,14 +54,14 @@ impl StyledStr {
     }
 
     pub fn print_data_err(&self) -> ! {
-        self.print_err().unwrap();
+        self.print_msg().unwrap();
 
         // DATAERR
         std::process::exit(65)
     }
 
     pub fn print_success(&self) -> ! {
-        self.print_err().unwrap();
+        self.print_msg().unwrap();
 
         // SUCCESS
         std::process::exit(0)
@@ -76,10 +76,7 @@ pub enum Style {
 
 pub fn maybe_json(data: Option<String>) -> Option<Map<String, Value>> {
     if let Some(json) = data {
-        match serde_json::from_str(json.as_str()) {
-            Ok(json_data) => Some(json_data),
-            Err(_e) => None,
-        }
+        serde_json::from_str(json.as_str()).ok()
     } else {
         None
     }
