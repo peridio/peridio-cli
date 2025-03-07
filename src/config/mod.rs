@@ -11,8 +11,8 @@ use std::{collections::HashMap, fs, path::PathBuf};
 use self::config_v1::ConfigV1;
 
 #[derive(Serialize, Deserialize, Clone)]
-struct Credential {
-    api_key: Option<String>,
+pub struct Credential {
+    pub api_key: Option<String>,
 }
 
 pub struct Config;

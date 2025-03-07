@@ -1,6 +1,7 @@
+mod profiles;
+
 use std::fs;
-use std::io::BufWriter;
-use std::io::Write;
+use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 
 use super::Command;
@@ -12,16 +13,20 @@ use crate::Error;
 use crate::GlobalOptions;
 use clap::Parser;
 use directories::ProjectDirs;
+use profiles::ProfilesCommand;
 
 #[derive(Parser, Debug)]
 pub enum ConfigCommand {
     Upgrade(Command<UpgradeCommand>),
+    #[command(subcommand)]
+    Profiles(ProfilesCommand),
 }
 
 impl ConfigCommand {
     pub async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         match self {
             Self::Upgrade(cmd) => cmd.run(global_options).await,
+            Self::Profiles(cmd) => cmd.run(global_options).await,
         }
     }
 }
