@@ -1,3 +1,9 @@
+use assert_cmd::Command;
+use indent::indent_by;
+use predicates::prelude::PredicateBooleanExt;
+use serde_json::Value;
+use static_init::dynamic;
+use std::collections::HashMap;
 use std::env::VarError;
 use std::io::ErrorKind;
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
@@ -7,13 +13,7 @@ use std::str;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use std::{env, fs};
-
-use assert_cmd::Command;
-use indent::indent_by;
-use predicates::prelude::PredicateBooleanExt;
-use serde_json::Value;
-use static_init::dynamic;
-use tempfile::{NamedTempFile, TempPath};
+use tempfile::{tempdir, NamedTempFile, TempPath};
 use uuid::Uuid;
 
 #[test]
@@ -355,4 +355,57 @@ impl Drop for PeridioCloudAPI {
             }
         }
     }
+}
+
+#[test]
+fn config_init_creates_profile() {
+    // Create a temporary directory for config files
+    let temp_dir = tempdir().unwrap();
+    let temp_dir_path = temp_dir.path().to_str().unwrap().to_string();
+
+    // Prepare test values
+    let profile_name = "test-profile";
+    let org_name = "test-org";
+    let api_key = "test-api-key";
+
+    // Run config init with simulated input
+    let mut cmd = Command::cargo_bin("peridio-cli").unwrap();
+    cmd.args(["--profile", "temp-profile"]) // We need to provide a profile when using config-directory
+        .args(["--config-directory", &temp_dir_path])
+        .args(["config", "profiles", "create"])
+        .args(["--name", profile_name])
+        .args(["--organization-name", org_name])
+        .args(["--api-key", api_key])
+        .args(["--no-input"])
+        .assert()
+        .success()
+        .stderr(predicates::str::contains(format!(
+            "Profile '{}' configured successfully",
+            profile_name
+        )));
+
+    // Verify config.json file
+    let config_path = temp_dir.path().join("config.json");
+    assert!(config_path.exists(), "config.json wasn't created");
+
+    let config_content = fs::read_to_string(&config_path).unwrap();
+    let config: serde_json::Value = serde_json::from_str(&config_content).unwrap();
+
+    assert_eq!(config["version"], 2);
+    assert!(config["profiles"].is_object());
+    assert!(config["profiles"][profile_name].is_object());
+    assert_eq!(
+        config["profiles"][profile_name]["organization_name"],
+        org_name
+    );
+
+    // Verify credentials.json file
+    let creds_path = temp_dir.path().join("credentials.json");
+    assert!(creds_path.exists(), "credentials.json wasn't created");
+
+    let creds_content = fs::read_to_string(&creds_path).unwrap();
+    let creds: HashMap<String, serde_json::Value> = serde_json::from_str(&creds_content).unwrap();
+
+    assert!(creds.contains_key(profile_name));
+    assert_eq!(creds[profile_name]["api_key"], api_key);
 }
