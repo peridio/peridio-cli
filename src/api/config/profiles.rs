@@ -1,19 +1,18 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io::{BufWriter, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use super::Command;
 use crate::config::config_v2::{ConfigV2, ProfileV2};
 use crate::config::Credential;
-use crate::utils::Style;
 use crate::utils::StyledStr;
+use crate::utils::{maybe_config_directory, Style};
 use crate::Error;
 use crate::GlobalOptions;
 use clap::Parser;
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::Password;
-use directories::ProjectDirs;
 
 #[derive(Parser, Debug)]
 pub enum ProfilesCommand {
@@ -50,17 +49,12 @@ pub struct CreateCommand {
 impl Command<CreateCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         // Get configuration directory
-        let config_dir_path = if let Some(config_dir) = &global_options.config_directory {
-            let config_dir_path = PathBuf::from(config_dir);
-            fs::create_dir_all(&config_dir_path).unwrap();
-            config_dir_path
-        } else if let Some(proj_dirs) = ProjectDirs::from("", "", "peridio") {
-            let config_dir = proj_dirs.config_dir();
-            fs::create_dir_all(config_dir).unwrap();
-            config_dir.to_path_buf()
+        let config_dir_path = if let Some(config_dir) = maybe_config_directory(&global_options) {
+            config_dir
         } else {
-            panic!("Unable to determine configuration directory")
+            panic!("We can't determine your config path")
         };
+        fs::create_dir_all(&config_dir_path).unwrap();
 
         // Create config and credentials paths
         let config_path = config_dir_path.join("config.json");
@@ -93,8 +87,7 @@ impl Command<CreateCommand> {
 
         // Load or create config file
         let mut config = if config_path.exists() {
-            let config_data = fs::read_to_string(&config_path).expect("Cannot read config file");
-            serde_json::from_str::<ConfigV2>(&config_data).unwrap_or_else(|_| ConfigV2::default())
+            ConfigV2::try_from(&config_path).unwrap_or_else(|_| ConfigV2::default())
         } else {
             ConfigV2::default()
         };

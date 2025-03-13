@@ -2,8 +2,10 @@ use crate::config::config_v1::ConfigV1;
 use crate::config::config_v1::ProfileV1;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
 use std::ops::Deref;
 use std::ops::DerefMut;
+use std::path::PathBuf;
 
 pub type ProfileNameV2 = String;
 
@@ -96,6 +98,12 @@ impl Deref for SigningKeyPairsV2 {
     }
 }
 
+impl DerefMut for SigningKeyPairsV2 {
+    fn deref_mut(&mut self) -> &mut HashMap<SigningKeyPairNameV2, SigningKeyPairV2> {
+        &mut self.0
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CertificateAuthorityV2 {
     pub private_key: String,
@@ -148,5 +156,14 @@ impl TryFrom<ConfigV1> for ConfigV2 {
             }
             Err(err) => Err(err),
         }
+    }
+}
+
+impl TryFrom<&PathBuf> for ConfigV2 {
+    type Error = Box<dyn std::error::Error>;
+
+    fn try_from(config_path: &PathBuf) -> Result<Self, Self::Error> {
+        let config_data = fs::read_to_string(config_path)?;
+        Ok(serde_json::from_str::<ConfigV2>(&config_data)?)
     }
 }

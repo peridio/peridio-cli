@@ -45,6 +45,9 @@ pub enum Error {
         source: io::Error,
     },
 
+    #[snafu(display("{:?}", path))]
+    AlreadyExistingFile { path: path::PathBuf },
+
     #[snafu(display("Failed to create certificate parameters: {}", source))]
     CertParamsCreation { source: rcgen::Error },
 
@@ -183,6 +186,14 @@ async fn main() -> ExitCode {
                     let mut error = StyledStr::new();
                     error.push_str(Some(Style::Error), "error: ".to_string());
                     error.push_str(None, "Path does not exist:\r\n".to_string());
+                    error.push_str(Some(Style::Warning), format!("\t{}", path.display()));
+                    error.print_data_err();
+                }
+
+                Error::AlreadyExistingFile { path } => {
+                    let mut error = StyledStr::new();
+                    error.push_str(Some(Style::Error), "error: ".to_string());
+                    error.push_str(None, "a file already exist at:\r\n".to_string());
                     error.push_str(Some(Style::Warning), format!("\t{}", path.display()));
                     error.print_data_err();
                 }
