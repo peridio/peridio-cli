@@ -1,10 +1,17 @@
 pub mod serde_introspection;
 
 use clap::error::{ContextKind, ContextValue, ErrorKind};
+use directories::ProjectDirs;
+use dirs::home_dir;
 use serde_json::{Map, Value};
 use std::io::Write;
+use std::path::Component;
+use std::path::Path;
+use std::{env, path::PathBuf};
 use termcolor::WriteColor;
 use uuid::Uuid;
+
+use crate::GlobalOptions;
 
 pub struct StyledStr {
     messages: Vec<(Option<Style>, String)>,
@@ -77,6 +84,25 @@ pub enum Style {
 pub fn maybe_json(data: Option<String>) -> Option<Map<String, Value>> {
     if let Some(json) = data {
         serde_json::from_str(json.as_str()).ok()
+    } else {
+        None
+    }
+}
+
+pub fn maybe_config_directory(global_options: &GlobalOptions) -> Option<PathBuf> {
+    if let Some(config_dir) = &global_options.config_directory {
+        let config_dir_path = PathBuf::from(config_dir);
+
+        if config_dir_path.exists() {
+            // use this config
+            Some(config_dir_path)
+        } else {
+            None
+        }
+    } else if let Some(proj_dirs) = ProjectDirs::from("", "", "peridio") {
+        let cache_dir = proj_dirs.config_dir();
+
+        Some(cache_dir.to_path_buf())
     } else {
         None
     }
@@ -284,6 +310,72 @@ impl clap::builder::TypedValueParser for PRNValueParser {
 
         Ok(value)
     }
+}
+
+/// Build a usable path from user input which may be:
+/// - absolute (starts with /)
+/// - relative to home (starts with ~)
+/// - relative to the current directory
+///
+/// Returns an error if path expansion fails.
+pub fn path_from(input: &str) -> Result<PathBuf, std::io::Error> {
+    if input.starts_with('/') {
+        // Absolute path
+        Ok(PathBuf::from(input))
+    } else if input.starts_with("~/") || input == "~" {
+        // Home directory expansion
+        match home_dir() {
+            Some(mut path) => {
+                if input.len() > 1 {
+                    path.push(&input[2..]);
+                }
+                Ok(normalize_path(path))
+            }
+            None => Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "Home directory not found",
+            )),
+        }
+    } else {
+        // Relative path to current directory
+        let base = env::current_dir()?;
+        let path = base.join(input);
+        Ok(normalize_path(path))
+    }
+}
+
+/// Normalize a path by resolving parent directory references (..)
+///
+/// This handles paths like "a/b/../c" -> "a/c", but doesn't resolve symlinks.
+/// Preserves trailing slashes in the original path.
+pub fn normalize_path<P: AsRef<Path>>(path: P) -> PathBuf {
+    let path_ref = path.as_ref();
+    let ends_with_slash = path_ref
+        .to_str()
+        .map_or_else(|| false, |s| s.ends_with('/'));
+
+    let mut normalized = PathBuf::new();
+    for component in path_ref.components() {
+        match component {
+            Component::ParentDir => {
+                // Only pop if we have something to pop, otherwise keep the ..
+                if !normalized.as_os_str().is_empty() && normalized.file_name().is_some() {
+                    normalized.pop();
+                } else {
+                    normalized.push(component);
+                }
+            }
+            _ => {
+                normalized.push(component);
+            }
+        }
+    }
+
+    if ends_with_slash {
+        normalized.push("");
+    }
+
+    normalized
 }
 
 // #[derive(Clone, Debug)]

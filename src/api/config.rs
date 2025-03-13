@@ -2,17 +2,15 @@ mod profiles;
 
 use std::fs;
 use std::io::{BufWriter, Write};
-use std::path::PathBuf;
 
 use super::Command;
 use crate::config::config_v1::ConfigV1;
 use crate::config::config_v2::ConfigV2;
-use crate::utils::Style;
 use crate::utils::StyledStr;
+use crate::utils::{maybe_config_directory, Style};
 use crate::Error;
 use crate::GlobalOptions;
 use clap::Parser;
-use directories::ProjectDirs;
 use profiles::ProfilesCommand;
 
 #[derive(Parser, Debug)]
@@ -36,19 +34,9 @@ pub struct UpgradeCommand;
 
 impl Command<UpgradeCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
-        let mut config_dir_path = if let Some(config_dir) = &global_options.config_directory {
-            let config_dir_path = PathBuf::from(config_dir);
-
-            if config_dir_path.exists() {
-                // use this config
-                config_dir_path
-            } else {
-                panic!("The provided config directory is invalid");
-            }
-        } else if let Some(proj_dirs) = ProjectDirs::from("", "", "peridio") {
-            let cache_dir = proj_dirs.config_dir();
-
-            cache_dir.to_path_buf()
+        let mut config_dir_path = if let Some(config_dir) = maybe_config_directory(&global_options)
+        {
+            config_dir
         } else {
             panic!("We can't determine your config path")
         };
