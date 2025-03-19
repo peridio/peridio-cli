@@ -12,7 +12,6 @@ mod device_certificates;
 mod devices;
 mod firmwares;
 mod list;
-mod organization;
 mod products;
 mod products_v2;
 mod releases;
@@ -81,8 +80,6 @@ pub enum ApiCommand {
     #[command(subcommand)]
     Firmwares(firmwares::FirmwaresCommand),
     #[command(subcommand)]
-    Organizations(organization::OrganizationCommand),
-    #[command(subcommand)]
     Products(products::ProductsCommand),
     #[command(subcommand)]
     ProductsV2(products_v2::ProductsV2Command),
@@ -127,7 +124,6 @@ impl CliCommands {
                     ApiCommand::DeviceCertificates(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Devices(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Firmwares(cmd) => cmd.run(global_options).await?,
-                    ApiCommand::Organizations(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Products(cmd) => cmd.run(global_options).await?,
                     ApiCommand::ProductsV2(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Releases(cmd) => cmd.run(global_options).await?,

@@ -68,6 +68,7 @@ jobs:
           path: |
             ${{ env.PERIDIO_CLOUD_PATH }}/deps
             ${{ env.PERIDIO_CLOUD_PATH }}/_build
+            ${{ env.PERIDIO_CLOUD_PATH }}/apps/peridio_cloud_core/priv
           key: deps-${{ runner.os }}-${{ hashFiles('**/mix.lock') }}
           restore-keys: |
             deps-${{ runner.os }}
