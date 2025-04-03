@@ -618,7 +618,7 @@ impl CreateCommand {
                             match api.artifacts().get(artifact_params).await {
                                 Ok(Some(GetArtifactResponse { artifact })) => {
                                     format!(
-                                        "Signed binary already exists for artifact \"{}\" at version \"{}\" with target \"{}\". Once a binary is signed, it cannot be overwritten.",
+                                        "A signed binary already exists for artifact \"{}\" at version \"{}\" with target \"{}\". Once a binary is signed, it cannot be overwritten.",
                                         artifact.name,
                                         artifact_version.version,
                                         binary.target
