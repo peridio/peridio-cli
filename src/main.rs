@@ -56,6 +56,9 @@ pub enum Error {
 
     #[snafu(display("Failed to parse date: {}", source))]
     DateParse { source: time::error::Parse },
+
+    #[snafu(display("{}", error))]
+    Generic { error: String },
 }
 
 impl fmt::Debug for Error {

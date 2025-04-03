@@ -18,6 +18,10 @@ use futures_util::StreamExt;
 use indicatif::ProgressBar;
 use indicatif::ProgressState;
 use indicatif::ProgressStyle;
+use peridio_sdk::api::artifact_versions::GetArtifactVersionParams;
+use peridio_sdk::api::artifact_versions::GetArtifactVersionResponse;
+use peridio_sdk::api::artifacts::GetArtifactParams;
+use peridio_sdk::api::artifacts::GetArtifactResponse;
 use peridio_sdk::api::binaries::Binary;
 use peridio_sdk::api::binaries::BinaryState;
 use peridio_sdk::api::binaries::CreateBinaryParams;
@@ -596,6 +600,37 @@ impl CreateCommand {
                 // we found the binary, do as it was created
                 eprintln!("Binary already exists...");
                 let binary = binaries.first().unwrap().clone();
+
+                // if the binary is signed we return an error
+                if matches!(binary.state, BinaryState::Signed) {
+                    let artifact_version_params = GetArtifactVersionParams {
+                        prn: binary.artifact_version_prn.clone(),
+                    };
+                    let fallback_message = format!(
+                        "A signed binary already exists for \"{}\" with a target of \"{}\". Once a binary is signed, it cannot be overwritten.",
+                        binary.artifact_version_prn, binary.target
+                    );
+                    let message = match api.artifact_versions().get(artifact_version_params).await {
+                        Ok(Some(GetArtifactVersionResponse { artifact_version })) => {
+                            let artifact_params = GetArtifactParams {
+                                prn: artifact_version.artifact_prn.clone(),
+                            };
+                            match api.artifacts().get(artifact_params).await {
+                                Ok(Some(GetArtifactResponse { artifact })) => {
+                                    format!(
+                                        "A signed binary already exists for artifact \"{}\" at version \"{}\" with target \"{}\". Once a binary is signed, it cannot be overwritten.",
+                                        artifact.name,
+                                        artifact_version.version,
+                                        binary.target
+                                    )
+                                }
+                                _ => fallback_message,
+                            }
+                        }
+                        _ => fallback_message,
+                    };
+                    return Err(Error::Generic { error: message });
+                }
 
                 // is we get a binary, check the hash with out local hash
                 // if mismatch
