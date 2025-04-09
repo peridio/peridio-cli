@@ -71,7 +71,8 @@ fn with_users_with_me_shows_email_and_username() {
     let base_url = base_url();
     let ca_path_buf = peridio_cloud_certificate_authority_path();
     let user = User::create(&format!("{}.com", random_name()));
-    let api_key = user.create_api_key();
+    let org = Organization::create(&user);
+    let api_key = APIKey::create(&org, &user);
     let ca_path = ca_path_buf.into_os_string().into_string().unwrap();
 
     PERIDIO_CLOUD_API.init();
@@ -187,11 +188,75 @@ fn random_name() -> String {
     )
 }
 
+struct APIKey {}
+
+impl APIKey {
+    fn create(org: &Organization, user: &User) -> String {
+        let description = random_name();
+        let api_key_temp_path = NamedTempFile::new().unwrap().into_temp_path();
+
+        match peridio_cloud_core_mix_command()
+            .arg("peridio.api_key.create")
+            .args(["--description", &description])
+            .args(["--org-prn-file", org.prn_temp_path.to_str().unwrap()])
+            .args(["--user-prn-file", user.prn_temp_path.to_str().unwrap()])
+            .args(["--api-key-file", api_key_temp_path.to_str().unwrap()])
+            .output()
+        {
+            Ok(output) => {
+                if !output.status.success() {
+                    panic!(
+                        "mix peridio.api_key.create failed\n  STDOUT:\n    {}\n\n  STDERR:\n    {}",
+                        indent_by(4, String::from_utf8(output.stdout).unwrap()),
+                        indent_by(4, String::from_utf8(output.stderr).unwrap())
+                    );
+                } else {
+                    String::from_utf8(std::fs::read(api_key_temp_path).unwrap()).unwrap()
+                }
+            }
+            Err(error) => panic!("{:?}", error),
+        }
+    }
+}
+
+struct Organization {
+    prn_temp_path: TempPath,
+}
+
+impl Organization {
+    fn create(user: &User) -> Self {
+        let name = random_name();
+        let prn_temp_path = NamedTempFile::new().unwrap().into_temp_path();
+
+        match peridio_cloud_core_mix_command()
+            .arg("peridio.org.create")
+            .args(["--name", &name])
+            .args(["--prn-file", prn_temp_path.to_str().unwrap()])
+            .args(["--user-prn-file", user.prn_temp_path.to_str().unwrap()])
+            .output()
+        {
+            Ok(output) => {
+                if !output.status.success() {
+                    panic!(
+                        "mix peridio.org.create failed\n  STDOUT:\n    {}\n\n  STDERR:\n    {}",
+                        indent_by(4, String::from_utf8(output.stdout).unwrap()),
+                        indent_by(4, String::from_utf8(output.stderr).unwrap())
+                    );
+                }
+            }
+            Err(error) => panic!("{:?}", error),
+        }
+
+        Self { prn_temp_path }
+    }
+}
+
 struct User {
     username: String,
     email: String,
     prn_temp_path: TempPath,
 }
+
 impl User {
     fn create(email_domain: &str) -> Self {
         let username = random_name();
@@ -225,44 +290,18 @@ impl User {
             prn_temp_path,
         }
     }
-
-    fn create_api_key(&self) -> String {
-        let note = random_name();
-        let user_token_temp_path = NamedTempFile::new().unwrap().into_temp_path();
-
-        match peridio_cloud_core_mix_command()
-            .arg("peridio.user_token.create")
-            .args(["--user-prn-file", self.prn_temp_path.to_str().unwrap()])
-            .args(["--note", &note])
-            .args(["--user-token-file", user_token_temp_path.to_str().unwrap()])
-            .output()
-        {
-            Ok(output) => {
-                if !output.status.success() {
-                    panic!(
-                        "mix peridio.user_token.create failed\n  STDOUT:\n    {}\n\n  STDERR:\n    {}",
-                        indent_by(4, String::from_utf8(output.stdout).unwrap()),
-                        indent_by(4, String::from_utf8(output.stderr).unwrap())
-                    );
-                } else {
-                    String::from_utf8(std::fs::read(user_token_temp_path).unwrap()).unwrap()
-                }
-            }
-            Err(error) => panic!("{:?}", error),
-        }
-    }
 }
 
 fn peridio_cloud_api_mix_command() -> std::process::Command {
     let mut command = mix_command();
-    command.args(["cmd", "--app", "peridio_cloud_api", "mix"]);
+    command.args(["do", "--app", "peridio_cloud_api"]);
 
     command
 }
 
 fn peridio_cloud_core_mix_command() -> std::process::Command {
     let mut command = mix_command();
-    command.args(["cmd", "--app", "peridio_cloud_core", "mix"]);
+    command.args(["do", "--app", "peridio_cloud_core"]);
 
     command
 }

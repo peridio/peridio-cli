@@ -1,24 +1,26 @@
 use super::Command;
 use crate::print_json;
+use crate::utils::list::ListArgs;
+use crate::utils::sdk_extensions::{ApiExt, ListExt};
+use crate::utils::PRNType;
+use crate::utils::PRNValueParser;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
 use clap::Parser;
-use peridio_sdk::api::products::UpdateProduct;
-use peridio_sdk::api::products::{
-    CreateProductParams, DeleteProductParams, GetProductParams, ListProductParams,
-    UpdateProductParams,
-};
+use peridio_sdk::api::products::CreateProductParams;
+use peridio_sdk::api::products::GetProductParams;
+use peridio_sdk::api::products::ListProductsParams;
+use peridio_sdk::api::products::UpdateProductParams;
 use peridio_sdk::api::Api;
-use peridio_sdk::api::ApiOptions;
+use peridio_sdk::list_params::ListParams;
 use snafu::ResultExt;
 
 #[derive(Parser, Debug)]
 pub enum ProductsCommand {
     Create(Command<CreateCommand>),
-    Delete(Command<DeleteCommand>),
-    Get(Command<GetCommand>),
     List(Command<ListCommand>),
+    Get(Command<GetCommand>),
     Update(Command<UpdateCommand>),
 }
 
@@ -26,33 +28,41 @@ impl ProductsCommand {
     pub async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         match self {
             Self::Create(cmd) => cmd.run(global_options).await,
-            Self::Delete(cmd) => cmd.run(global_options).await,
-            Self::Get(cmd) => cmd.run(global_options).await,
             Self::List(cmd) => cmd.run(global_options).await,
+            Self::Get(cmd) => cmd.run(global_options).await,
             Self::Update(cmd) => cmd.run(global_options).await,
         }
     }
 }
 
 #[derive(Parser, Debug)]
+
 pub struct CreateCommand {
+    /// Whether the product is archived.
+    #[arg(long)]
+    archived: Option<bool>,
+
     /// The resource's name, meant to be displayable to users.
     #[arg(long)]
     name: String,
+
+    /// The PRN of the organization you wish to create the resource within.
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Organization)
+    )]
+    organization_prn: String,
 }
 
 impl Command<CreateCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = CreateProductParams {
-            organization_name: global_options.organization_name.unwrap(),
+            archived: self.inner.archived,
             name: self.inner.name,
+            organization_prn: self.inner.organization_prn,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.products().create(params).await.context(ApiSnafu)? {
             Some(product) => print_json!(&product),
@@ -64,76 +74,18 @@ impl Command<CreateCommand> {
 }
 
 #[derive(Parser, Debug)]
-pub struct DeleteCommand {
-    /// The name of the resource to delete.
-    #[arg(long)]
-    product_name: String,
+pub struct ListCommand {
+    #[clap(flatten)]
+    list_args: ListArgs,
 }
-
-impl Command<DeleteCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
-        let params = DeleteProductParams {
-            organization_name: global_options.organization_name.unwrap(),
-            product_name: self.inner.product_name,
-        };
-
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
-
-        if (api.products().delete(params).await.context(ApiSnafu)?).is_some() {
-            panic!()
-        };
-
-        Ok(())
-    }
-}
-
-#[derive(Parser, Debug)]
-pub struct GetCommand {
-    /// The name of the resource to get.
-    #[arg(long)]
-    product_name: String,
-}
-
-impl Command<GetCommand> {
-    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
-        let params = GetProductParams {
-            organization_name: global_options.organization_name.unwrap(),
-            product_name: self.inner.product_name,
-        };
-
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
-
-        match api.products().get(params).await.context(ApiSnafu)? {
-            Some(product) => print_json!(&product),
-            None => panic!(),
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Parser, Debug)]
-pub struct ListCommand {}
 
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
-        let params = ListProductParams {
-            organization_name: global_options.organization_name.unwrap(),
+        let params = ListProductsParams {
+            list: ListParams::from_args(&self.inner.list_args),
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.products().list(params).await.context(ApiSnafu)? {
             Some(product) => print_json!(&product),
@@ -145,34 +97,60 @@ impl Command<ListCommand> {
 }
 
 #[derive(Parser, Debug)]
+pub struct GetCommand {
+    /// The PRN of the resource to get.
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Product)
+    )]
+    prn: String,
+}
+
+impl Command<GetCommand> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+        let params = GetProductParams {
+            prn: self.inner.prn,
+        };
+
+        let api = Api::from_options(global_options);
+
+        match api.products().get(params).await.context(ApiSnafu)? {
+            Some(product) => print_json!(&product),
+            None => panic!(),
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Parser, Debug)]
 pub struct UpdateCommand {
+    /// The PRN of the resource to update.
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Product)
+    )]
+    prn: String,
     /// The resource's name, meant to be displayable to users.
     #[arg(long)]
     name: Option<String>,
-
-    /// The name (currently) of the resource to update.
+    /// Whether the product is archived.
     #[arg(long)]
-    product_name: String,
+    archived: Option<bool>,
 }
 
 impl Command<UpdateCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = UpdateProductParams {
-            organization_name: global_options.organization_name.unwrap(),
-            product_name: self.inner.product_name,
-            product: UpdateProduct {
-                name: self.inner.name,
-            },
+            prn: self.inner.prn,
+            name: self.inner.name,
+            archived: self.inner.archived,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.products().update(params).await.context(ApiSnafu)? {
-            Some(product) => print_json!(&product),
+            Some(device) => print_json!(&device),
             None => panic!(),
         }
 

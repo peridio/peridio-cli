@@ -1,12 +1,12 @@
 use super::Command;
 use crate::api::CliCommands;
 use crate::print_json;
+use crate::utils::sdk_extensions::ApiExt;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
 use clap::Parser;
 use peridio_sdk::api::Api;
-use peridio_sdk::api::ApiOptions;
 use snafu::ResultExt;
 
 #[derive(Parser, Debug)]
@@ -36,11 +36,7 @@ impl Command<MeCommand> {
 
         CliCommands::print_missing_arguments(missing_arguments);
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.users().me().await.context(ApiSnafu)? {
             Some(users_me) => print_json!(&users_me),

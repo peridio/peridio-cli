@@ -1,5 +1,6 @@
 use super::Command;
 use crate::print_json;
+use crate::utils::sdk_extensions::ApiExt;
 use crate::utils::PRNType;
 use crate::utils::PRNValueParser;
 use crate::ApiSnafu;
@@ -11,7 +12,6 @@ use peridio_sdk::api::binary_parts::CreateBinaryPartResponse;
 use peridio_sdk::api::binary_parts::ListBinaryPartsParams;
 use peridio_sdk::api::binary_parts::ListBinaryPartsResponse;
 use peridio_sdk::api::Api;
-use peridio_sdk::api::ApiOptions;
 use snafu::ResultExt;
 use std::fs;
 use std::path::PathBuf;
@@ -93,11 +93,7 @@ impl CreateCommand {
         let api = if let Some(api) = self.api {
             api
         } else {
-            Api::new(ApiOptions {
-                api_key: global_options.api_key.unwrap(),
-                endpoint: global_options.base_url,
-                ca_bundle_path: global_options.ca_path,
-            })
+            Api::from_options(global_options)
         };
 
         api.binary_parts().create(params).await.context(ApiSnafu)
@@ -139,11 +135,7 @@ impl ListCommand {
         let api = if let Some(api) = self.api {
             api
         } else {
-            Api::new(ApiOptions {
-                api_key: global_options.api_key.unwrap(),
-                endpoint: global_options.base_url,
-                ca_bundle_path: global_options.ca_path,
-            })
+            Api::from_options(global_options)
         };
 
         api.binary_parts().list(params).await.context(ApiSnafu)
