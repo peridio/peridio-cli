@@ -7,7 +7,7 @@ version = "1.0.0"
 edition = "2021"
 
 [dependencies]
-peridio-sdk = { git = "https://github.com/peridio/peridio-rust.git", branch = "jwong/rsdk-7-expose-last_connected_at-in-list-devices-and-retrieve-a" }
+peridio-sdk = { git = "https://github.com/peridio/peridio-rust.git", branch = "jwong/rsdk-9-v2-ca_certificates" }
 serde_json = "1.0.125"
 snafu = "0.8.4"
 tokio = { version = "1.39.3", features = ["full"] }
