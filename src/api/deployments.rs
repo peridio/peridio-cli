@@ -1,5 +1,6 @@
 use super::Command;
 use crate::print_json;
+use crate::utils::sdk_extensions::ApiExt;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
@@ -13,7 +14,6 @@ use peridio_sdk::api::deployments::UpdateDeployment;
 use peridio_sdk::api::deployments::UpdateDeploymentCondition;
 use peridio_sdk::api::deployments::UpdateDeploymentParams;
 use peridio_sdk::api::Api;
-use peridio_sdk::api::ApiOptions;
 use snafu::ResultExt;
 use uuid::Uuid;
 
@@ -72,7 +72,11 @@ impl Command<CreateCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = CreateDeploymentParams {
             firmware: self.inner.firmware.to_string(),
-            organization_name: global_options.organization_name.unwrap(),
+            organization_name: global_options
+                .organization_name
+                .as_ref()
+                .unwrap()
+                .to_string(),
             product_name: self.inner.product_name,
             name: self.inner.name,
             is_active: false, // must be false
@@ -83,11 +87,7 @@ impl Command<CreateCommand> {
             delta_updatable: self.inner.delta_updatable,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.deployments().create(params).await.context(ApiSnafu)? {
             Some(deployment) => print_json!(&deployment),
@@ -113,15 +113,15 @@ impl Command<DeleteCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = DeleteDeploymentParams {
             deployment_name: self.inner.deployment_name,
-            organization_name: global_options.organization_name.unwrap(),
+            organization_name: global_options
+                .organization_name
+                .as_ref()
+                .unwrap()
+                .to_string(),
             product_name: self.inner.product_name,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         if (api.deployments().delete(params).await.context(ApiSnafu)?).is_some() {
             panic!()
@@ -146,15 +146,15 @@ impl Command<GetCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = GetDeploymentParams {
             deployment_name: self.inner.deployment_name,
-            organization_name: global_options.organization_name.unwrap(),
+            organization_name: global_options
+                .organization_name
+                .as_ref()
+                .unwrap()
+                .to_string(),
             product_name: self.inner.product_name,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.deployments().get(params).await.context(ApiSnafu)? {
             Some(deployment) => print_json!(&deployment),
@@ -175,15 +175,15 @@ pub struct ListCommand {
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListDeploymentParams {
-            organization_name: global_options.organization_name.unwrap(),
+            organization_name: global_options
+                .organization_name
+                .as_ref()
+                .unwrap()
+                .to_string(),
             product_name: self.inner.product_name,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.deployments().list(params).await.context(ApiSnafu)? {
             Some(deployments) => print_json!(&deployments),
@@ -261,16 +261,16 @@ impl Command<UpdateCommand> {
 
         let params = UpdateDeploymentParams {
             deployment_name: self.inner.deployment_name.to_string(),
-            organization_name: global_options.organization_name.unwrap(),
+            organization_name: global_options
+                .organization_name
+                .as_ref()
+                .unwrap()
+                .to_string(),
             product_name: self.inner.product_name,
             deployment,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.deployments().update(params).await.context(ApiSnafu)? {
             Some(deployment) => print_json!(&deployment),

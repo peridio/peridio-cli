@@ -1,9 +1,10 @@
 use std::fs;
 
 use super::Command;
-use crate::api::list::ListArgs;
 use crate::print_json;
+use crate::utils::list::ListArgs;
 use crate::utils::maybe_json;
+use crate::utils::sdk_extensions::{ApiExt, ListExt};
 use crate::utils::PRNType;
 use crate::utils::PRNValueParser;
 use crate::ApiSnafu;
@@ -16,7 +17,7 @@ use peridio_sdk::api::artifacts::{
     UpdateArtifactParams,
 };
 use peridio_sdk::api::Api;
-use peridio_sdk::api::ApiOptions;
+use peridio_sdk::list_params::ListParams;
 use snafu::ResultExt;
 
 #[derive(Parser, Debug)]
@@ -91,11 +92,7 @@ impl Command<CreateCommand> {
             organization_prn: self.inner.organization_prn,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.artifacts().create(params).await.context(ApiSnafu)? {
             Some(artifact) => print_json!(&artifact),
@@ -143,17 +140,10 @@ pub struct ListCommand {
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListArtifactsParams {
-            limit: self.inner.list_args.limit,
-            order: self.inner.list_args.order,
-            search: self.inner.list_args.search,
-            page: self.inner.list_args.page,
+            list: ListParams::from_args(&self.inner.list_args),
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.artifacts().list(params).await.context(ApiSnafu)? {
             Some(artifact) => print_json!(&artifact),
@@ -180,11 +170,7 @@ impl Command<GetCommand> {
             prn: self.inner.prn,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.artifacts().get(params).await.context(ApiSnafu)? {
             Some(artifact) => print_json!(&artifact),
@@ -226,11 +212,7 @@ impl Command<UpdateCommand> {
             name: self.inner.name,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.artifacts().update(params).await.context(ApiSnafu)? {
             Some(device) => print_json!(&device),

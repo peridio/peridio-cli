@@ -1,6 +1,7 @@
 use super::Command;
-use crate::api::list::ListArgs;
 use crate::print_json;
+use crate::utils::list::ListArgs;
+use crate::utils::sdk_extensions::{ApiExt, ListExt};
 use crate::utils::PRNType;
 use crate::utils::PRNValueParser;
 use crate::ApiSnafu;
@@ -11,7 +12,7 @@ use peridio_sdk::api::bundles::{
     CreateBundleParams, DeleteBundleParams, GetBundleParams, ListBundlesParams, UpdateBundleParams,
 };
 use peridio_sdk::api::Api;
-use peridio_sdk::api::ApiOptions;
+use peridio_sdk::list_params::ListParams;
 use snafu::ResultExt;
 
 #[derive(Parser, Debug)]
@@ -70,11 +71,7 @@ impl Command<CreateCommand> {
             name: self.inner.name,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.bundles().create(params).await.context(ApiSnafu)? {
             Some(bundle) => print_json!(&bundle),
@@ -122,17 +119,10 @@ pub struct ListCommand {
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListBundlesParams {
-            limit: self.inner.list_args.limit,
-            order: self.inner.list_args.order,
-            search: self.inner.list_args.search,
-            page: self.inner.list_args.page,
+            list: ListParams::from_args(&self.inner.list_args),
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.bundles().list(params).await.context(ApiSnafu)? {
             Some(bundle) => print_json!(&bundle),
@@ -159,11 +149,7 @@ impl Command<GetCommand> {
             prn: self.inner.prn,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.bundles().get(params).await.context(ApiSnafu)? {
             Some(bundle) => print_json!(&bundle),
@@ -195,11 +181,7 @@ impl Command<UpdateCommand> {
             name: self.inner.name,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.bundles().update(params).await.context(ApiSnafu)? {
             Some(response) => print_json!(&response),

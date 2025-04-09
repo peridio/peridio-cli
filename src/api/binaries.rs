@@ -1,7 +1,8 @@
 use super::Command;
-use crate::api::list::ListArgs;
 use crate::print_json;
+use crate::utils::list::ListArgs;
 use crate::utils::maybe_json;
+use crate::utils::sdk_extensions::{ApiExt, ListExt};
 use crate::utils::PRNType;
 use crate::utils::PRNValueParser;
 use crate::ApiSnafu;
@@ -36,7 +37,7 @@ use peridio_sdk::api::binaries::UpdateBinaryResponse;
 use peridio_sdk::api::binary_parts::BinaryPartState;
 use peridio_sdk::api::binary_parts::ListBinaryPart;
 use peridio_sdk::api::Api;
-use peridio_sdk::api::ApiOptions;
+use peridio_sdk::list_params::ListParams;
 use reqwest::Body;
 use reqwest::Client;
 use sha2::{Digest, Sha256};
@@ -187,12 +188,7 @@ impl CreateCommand {
         &mut self,
         global_options: GlobalOptions,
     ) -> Result<Option<CreateBinaryResponse>, Error> {
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.clone().unwrap(),
-            endpoint: global_options.base_url.clone(),
-            ca_bundle_path: global_options.ca_path.clone(),
-        });
-
+        let api = Api::from_options(global_options.clone());
         self.global_options = Some(global_options.clone());
 
         let binary = match self.get_or_create_binary(&api).await? {
@@ -569,9 +565,6 @@ impl CreateCommand {
     }
 
     async fn get_or_create_binary(&self, api: &Api) -> Result<Option<CreateBinaryResponse>, Error> {
-        let organization_prn =
-            Self::get_organization_prn_from_prn(self.artifact_version_prn.clone());
-
         let (size, hash) = if let Some(content_path) = &self.content_path {
             eprintln!("Hashing binary...");
             let mut file = fs::File::open(content_path).context(NonExistingPathSnafu {
@@ -586,13 +579,15 @@ impl CreateCommand {
         };
 
         let list_params = ListBinariesParams {
-            search: format!(
-                "organization_prn:'{}' and target:'{}' and artifact_version_prn:'{}'",
-                organization_prn, self.target, self.artifact_version_prn
-            ),
-            limit: None,
-            order: None,
-            page: None,
+            list: ListParams {
+                search: Some(format!(
+                    "target:'{}' and artifact_version_prn:'{}'",
+                    self.target, self.artifact_version_prn
+                )),
+                limit: None,
+                order: None,
+                page: None,
+            },
         };
 
         match api.binaries().list(list_params).await.context(ApiSnafu)? {
@@ -710,15 +705,6 @@ impl CreateCommand {
 
         Ok(binary)
     }
-
-    fn get_organization_prn_from_prn(prn: String) -> String {
-        // ["prn", "1", org_id, resource_name, resource_id]
-        let prn: Vec<&str> = prn.split(':').collect();
-
-        let org_id = prn[2];
-
-        format!("prn:1:{org_id}")
-    }
 }
 
 impl Command<CreateCommand> {
@@ -769,17 +755,10 @@ pub struct ListCommand {
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListBinariesParams {
-            limit: self.inner.list_args.limit,
-            order: self.inner.list_args.order,
-            search: self.inner.list_args.search,
-            page: self.inner.list_args.page,
+            list: ListParams::from_args(&self.inner.list_args),
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.binaries().list(params).await.context(ApiSnafu)? {
             Some(binary) => print_json!(&binary),
@@ -810,11 +789,7 @@ impl GetCommand {
         let api = if let Some(api) = self.api {
             api
         } else {
-            Api::new(ApiOptions {
-                api_key: global_options.api_key.unwrap(),
-                endpoint: global_options.base_url,
-                ca_bundle_path: global_options.ca_path,
-            })
+            Api::from_options(global_options)
         };
 
         api.binaries().get(params).await.context(ApiSnafu)
@@ -882,11 +857,7 @@ impl UpdateCommand {
         let api = if let Some(api) = self.api {
             api
         } else {
-            Api::new(ApiOptions {
-                api_key: global_options.api_key.unwrap(),
-                endpoint: global_options.base_url,
-                ca_bundle_path: global_options.ca_path,
-            })
+            Api::from_options(global_options)
         };
 
         api.binaries().update(params).await.context(ApiSnafu)

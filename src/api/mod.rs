@@ -11,9 +11,7 @@ mod deployments;
 mod device_certificates;
 mod devices;
 mod firmwares;
-mod list;
 mod products;
-mod products_v2;
 mod releases;
 mod signing_keys;
 mod tunnels;
@@ -82,8 +80,6 @@ pub enum ApiCommand {
     #[command(subcommand)]
     Products(products::ProductsCommand),
     #[command(subcommand)]
-    ProductsV2(products_v2::ProductsV2Command),
-    #[command(subcommand)]
     Releases(releases::ReleasesCommand),
     #[command(subcommand)]
     SigningKeys(signing_keys::SigningKeysCommand),
@@ -125,7 +121,6 @@ impl CliCommands {
                     ApiCommand::Devices(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Firmwares(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Products(cmd) => cmd.run(global_options).await?,
-                    ApiCommand::ProductsV2(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Releases(cmd) => cmd.run(global_options).await?,
                     ApiCommand::SigningKeys(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Tunnels(cmd) => cmd.run(global_options).await?,

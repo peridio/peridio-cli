@@ -1,3 +1,5 @@
+pub mod list;
+pub mod sdk_extensions;
 pub mod serde_introspection;
 
 use clap::error::{ContextKind, ContextValue, ErrorKind};
@@ -151,7 +153,6 @@ pub enum PRNType {
     User,
     WebConsoleShell,
     Webhook,
-    UserToken,
 }
 
 impl TryFrom<String> for PRNType {
@@ -185,7 +186,6 @@ impl TryFrom<String> for PRNType {
             "user" => Ok(Self::User),
             "web_console_shell" => Ok(Self::WebConsoleShell),
             "webhook" => Ok(Self::Webhook),
-            "user_token" => Ok(Self::UserToken),
             _ => Err("Invalid PRN type"),
         }
     }
@@ -245,8 +245,8 @@ impl clap::builder::TypedValueParser for PRNValueParser {
                 0
             }
             4 => {
-                // user or user token
-                if self.0 != PRNType::User || self.0 != PRNType::UserToken {
+                // user
+                if self.0 != PRNType::User {
                     return Err(prn_error(cmd, arg, "Invalid PRN type"));
                 }
 
@@ -258,12 +258,8 @@ impl clap::builder::TypedValueParser for PRNValueParser {
 
                 let prn_type = prn_type.unwrap();
 
-                if prn_type != PRNType::User || prn_type != PRNType::UserToken {
-                    return Err(prn_error(
-                        cmd,
-                        arg,
-                        "Invalid PRN type, expected 'user' or 'user_token' PRN",
-                    ));
+                if prn_type != PRNType::User {
+                    return Err(prn_error(cmd, arg, "Invalid PRN type, expected 'user'"));
                 }
 
                 0

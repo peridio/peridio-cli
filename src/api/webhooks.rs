@@ -1,6 +1,7 @@
 use super::Command;
-use crate::api::list::ListArgs;
 use crate::print_json;
+use crate::utils::list::ListArgs;
+use crate::utils::sdk_extensions::{ApiExt, ListExt};
 use crate::utils::PRNType;
 use crate::utils::PRNValueParser;
 use crate::ApiSnafu;
@@ -15,7 +16,7 @@ use peridio_sdk::api::webhooks::RollSecretWebhookParams;
 use peridio_sdk::api::webhooks::TestFireWebhookParams;
 use peridio_sdk::api::webhooks::UpdateWebhookParams;
 use peridio_sdk::api::Api;
-use peridio_sdk::api::ApiOptions;
+use peridio_sdk::list_params::ListParams;
 use snafu::ResultExt;
 
 #[derive(Parser, Debug)]
@@ -77,11 +78,7 @@ impl Command<CreateCommand> {
             url: self.inner.url,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.webhooks().create(params).await.context(ApiSnafu)? {
             Some(webhook) => print_json!(&webhook),
@@ -101,17 +98,10 @@ pub struct ListCommand {
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListWebhooksParams {
-            limit: self.inner.list_args.limit,
-            order: self.inner.list_args.order,
-            search: self.inner.list_args.search,
-            page: self.inner.list_args.page,
+            list: ListParams::from_args(&self.inner.list_args),
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.webhooks().list(params).await.context(ApiSnafu)? {
             Some(webhook) => print_json!(&webhook),
@@ -138,11 +128,7 @@ impl Command<GetCommand> {
             prn: self.inner.prn,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.webhooks().get(params).await.context(ApiSnafu)? {
             Some(webhook) => print_json!(&webhook),
@@ -166,11 +152,7 @@ impl Command<RollSecretCommand> {
             prn: self.inner.prn,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.webhooks().roll_secret(params).await.context(ApiSnafu)? {
             Some(webhook) => print_json!(&webhook),
@@ -194,11 +176,7 @@ impl Command<TestFireCommand> {
             prn: self.inner.prn,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.webhooks().test_fire(params).await.context(ApiSnafu)? {
             Some(webhook) => print_json!(&webhook),
@@ -246,11 +224,7 @@ impl Command<UpdateCommand> {
             url: self.inner.url,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.webhooks().update(params).await.context(ApiSnafu)? {
             Some(device) => print_json!(&device),
@@ -277,11 +251,7 @@ impl Command<DeleteCommand> {
             webhook_prn: self.inner.webhook_prn,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         if (api.webhooks().delete(params).await.context(ApiSnafu)?).is_some() {
             panic!()

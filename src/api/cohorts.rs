@@ -1,6 +1,7 @@
 use super::Command;
-use crate::api::list::ListArgs;
 use crate::print_json;
+use crate::utils::list::ListArgs;
+use crate::utils::sdk_extensions::{ApiExt, ListExt};
 use crate::utils::PRNType;
 use crate::utils::PRNValueParser;
 use crate::ApiSnafu;
@@ -11,7 +12,7 @@ use peridio_sdk::api::cohorts::{
     CreateCohortParams, GetCohortParams, ListCohortsParams, UpdateCohortParams,
 };
 use peridio_sdk::api::Api;
-use peridio_sdk::api::ApiOptions;
+use peridio_sdk::list_params::ListParams;
 use snafu::ResultExt;
 
 #[derive(Parser, Debug)]
@@ -68,11 +69,7 @@ impl Command<CreateCommand> {
             product_prn: self.inner.product_prn,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.cohorts().create(params).await.context(ApiSnafu)? {
             Some(cohort) => print_json!(&cohort),
@@ -92,17 +89,10 @@ pub struct ListCommand {
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListCohortsParams {
-            limit: self.inner.list_args.limit,
-            order: self.inner.list_args.order,
-            search: self.inner.list_args.search,
-            page: self.inner.list_args.page,
+            list: ListParams::from_args(&self.inner.list_args),
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.cohorts().list(params).await.context(ApiSnafu)? {
             Some(cohort) => print_json!(&cohort),
@@ -129,11 +119,7 @@ impl Command<GetCommand> {
             prn: self.inner.prn,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.cohorts().get(params).await.context(ApiSnafu)? {
             Some(cohort) => print_json!(&cohort),
@@ -170,11 +156,7 @@ impl Command<UpdateCommand> {
             name: self.inner.name,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.cohorts().update(params).await.context(ApiSnafu)? {
             Some(cohort) => print_json!(&cohort),

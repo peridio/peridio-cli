@@ -1,5 +1,6 @@
 use super::Command;
 use crate::print_json;
+use crate::utils::sdk_extensions::ApiExt;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
@@ -10,7 +11,6 @@ use peridio_sdk::api::device_certificates::DeleteDeviceCertificateParams;
 use peridio_sdk::api::device_certificates::GetDeviceCertificateParams;
 use peridio_sdk::api::device_certificates::ListDeviceCertificateParams;
 use peridio_sdk::api::Api;
-use peridio_sdk::api::ApiOptions;
 use snafu::ResultExt;
 use std::fs;
 
@@ -71,17 +71,17 @@ impl Command<CreateCommand> {
         let encoded_certificate = general_purpose::STANDARD.encode(&certificate);
 
         let params = CreateDeviceCertificateParams {
-            organization_name: global_options.organization_name.unwrap(),
+            organization_name: global_options
+                .organization_name
+                .as_ref()
+                .unwrap()
+                .to_string(),
             product_name: self.inner.product_name,
             device_identifier: self.inner.device_identifier,
             cert: encoded_certificate,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api
             .device_certificates()
@@ -116,16 +116,16 @@ impl Command<DeleteCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = DeleteDeviceCertificateParams {
             device_identifier: self.inner.device_identifier,
-            organization_name: global_options.organization_name.unwrap(),
+            organization_name: global_options
+                .organization_name
+                .as_ref()
+                .unwrap()
+                .to_string(),
             product_name: self.inner.product_name,
             certificate_serial: self.inner.certificate_serial,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         if (api
             .device_certificates()
@@ -160,16 +160,16 @@ impl Command<GetCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = GetDeviceCertificateParams {
             device_identifier: self.inner.device_identifier,
-            organization_name: global_options.organization_name.unwrap(),
+            organization_name: global_options
+                .organization_name
+                .as_ref()
+                .unwrap()
+                .to_string(),
             product_name: self.inner.product_name,
             certificate_serial: self.inner.certificate_serial,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api
             .device_certificates()
@@ -199,16 +199,16 @@ pub struct ListCommand {
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListDeviceCertificateParams {
-            organization_name: global_options.organization_name.unwrap(),
+            organization_name: global_options
+                .organization_name
+                .as_ref()
+                .unwrap()
+                .to_string(),
             product_name: self.inner.product_name,
             device_identifier: self.inner.device_identifier,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api
             .device_certificates()

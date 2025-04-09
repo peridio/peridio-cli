@@ -1,5 +1,6 @@
 use super::Command;
 use crate::print_json;
+use crate::utils::sdk_extensions::ApiExt;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
@@ -8,7 +9,6 @@ use peridio_sdk::api::firmwares::{
     CreateFirmwareParams, DeleteFirmwareParams, GetFirmwareParams, ListFirmwareParams,
 };
 use peridio_sdk::api::Api;
-use peridio_sdk::api::ApiOptions;
 use snafu::ResultExt;
 use uuid::Uuid;
 
@@ -52,16 +52,16 @@ impl Command<CreateCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = CreateFirmwareParams {
             firmware_path: self.inner.firmware_path,
-            organization_name: global_options.organization_name.unwrap(),
+            organization_name: global_options
+                .organization_name
+                .as_ref()
+                .unwrap()
+                .to_string(),
             product_name: self.inner.product_name,
             ttl: self.inner.ttl,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.firmwares().create(params).await.context(ApiSnafu)? {
             Some(firmware) => print_json!(&firmware),
@@ -87,15 +87,15 @@ impl Command<DeleteCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = DeleteFirmwareParams {
             firmware_uuid: self.inner.firmware_uuid.to_string(),
-            organization_name: global_options.organization_name.unwrap(),
+            organization_name: global_options
+                .organization_name
+                .as_ref()
+                .unwrap()
+                .to_string(),
             product_name: self.inner.product_name,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         if (api.firmwares().delete(params).await.context(ApiSnafu)?).is_some() {
             panic!()
@@ -120,15 +120,15 @@ impl Command<GetCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = GetFirmwareParams {
             firmware_uuid: self.inner.firmware_uuid.to_string(),
-            organization_name: global_options.organization_name.unwrap(),
+            organization_name: global_options
+                .organization_name
+                .as_ref()
+                .unwrap()
+                .to_string(),
             product_name: self.inner.product_name,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.firmwares().get(params).await.context(ApiSnafu)? {
             Some(firmware) => print_json!(&firmware),
@@ -149,15 +149,15 @@ pub struct ListCommand {
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListFirmwareParams {
-            organization_name: global_options.organization_name.unwrap(),
+            organization_name: global_options
+                .organization_name
+                .as_ref()
+                .unwrap()
+                .to_string(),
             product_name: self.inner.product_name,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from_options(global_options);
 
         match api.firmwares().list(params).await.context(ApiSnafu)? {
             Some(firmwares) => print_json!(&firmwares),
