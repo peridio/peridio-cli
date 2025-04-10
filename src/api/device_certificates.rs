@@ -1,6 +1,7 @@
 use super::Command;
 use crate::print_json;
-use crate::utils::sdk_extensions::ApiExt;
+use crate::utils::list::ListArgs;
+use crate::utils::sdk_extensions::{ApiExt, ListExt};
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
@@ -11,6 +12,7 @@ use peridio_sdk::api::device_certificates::DeleteDeviceCertificateParams;
 use peridio_sdk::api::device_certificates::GetDeviceCertificateParams;
 use peridio_sdk::api::device_certificates::ListDeviceCertificateParams;
 use peridio_sdk::api::Api;
+use peridio_sdk::list_params::ListParams;
 use snafu::ResultExt;
 use std::fs;
 
@@ -35,13 +37,9 @@ impl DeviceCertificatesCommand {
 
 #[derive(Parser, Debug)]
 pub struct CreateCommand {
-    /// The identifier of the device you wish to create a certificate for.
+    /// The prn of the device you wish to create a certificate for.
     #[arg(long)]
-    device_identifier: String,
-
-    /// The name of the product you wish to create the resource within.
-    #[arg(long)]
-    product_name: String,
+    device_prn: String,
 
     /// The certificate PEM content.
     #[arg(
@@ -71,14 +69,8 @@ impl Command<CreateCommand> {
         let encoded_certificate = general_purpose::STANDARD.encode(&certificate);
 
         let params = CreateDeviceCertificateParams {
-            organization_name: global_options
-                .organization_name
-                .as_ref()
-                .unwrap()
-                .to_string(),
-            product_name: self.inner.product_name,
-            device_identifier: self.inner.device_identifier,
-            cert: encoded_certificate,
+            device_prn: self.inner.device_prn,
+            certificate: encoded_certificate,
         };
 
         let api = Api::from_options(global_options);
@@ -99,30 +91,15 @@ impl Command<CreateCommand> {
 
 #[derive(Parser, Debug)]
 pub struct DeleteCommand {
-    /// The identifier of the device you wish to delete a certificate for.
+    /// The prn of the device_certificate.
     #[arg(long)]
-    device_identifier: String,
-
-    /// The name of the product you wish to delete the resource within.
-    #[arg(long)]
-    product_name: String,
-
-    /// The serial number of the certificate you wish to delete.
-    #[arg(long)]
-    certificate_serial: String,
+    prn: String,
 }
 
 impl Command<DeleteCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = DeleteDeviceCertificateParams {
-            device_identifier: self.inner.device_identifier,
-            organization_name: global_options
-                .organization_name
-                .as_ref()
-                .unwrap()
-                .to_string(),
-            product_name: self.inner.product_name,
-            certificate_serial: self.inner.certificate_serial,
+            prn: self.inner.prn,
         };
 
         let api = Api::from_options(global_options);
@@ -143,30 +120,15 @@ impl Command<DeleteCommand> {
 
 #[derive(Parser, Debug)]
 pub struct GetCommand {
-    /// The identifier of the device you wish to get a certificate for.
+    /// The prn of the device_certificate.
     #[arg(long)]
-    device_identifier: String,
-
-    /// The name of the product you wish to get the resource within.
-    #[arg(long)]
-    product_name: String,
-
-    /// The serial number of the certificate you wish to get.
-    #[arg(long)]
-    certificate_serial: String,
+    prn: String,
 }
 
 impl Command<GetCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = GetDeviceCertificateParams {
-            device_identifier: self.inner.device_identifier,
-            organization_name: global_options
-                .organization_name
-                .as_ref()
-                .unwrap()
-                .to_string(),
-            product_name: self.inner.product_name,
-            certificate_serial: self.inner.certificate_serial,
+            prn: self.inner.prn,
         };
 
         let api = Api::from_options(global_options);
@@ -187,25 +149,14 @@ impl Command<GetCommand> {
 
 #[derive(Parser, Debug)]
 pub struct ListCommand {
-    /// The identifier of the device you wish to list certificates for.
-    #[arg(long)]
-    device_identifier: String,
-
-    /// The name of the product you wish to list the resource within.
-    #[arg(long)]
-    product_name: String,
+    #[clap(flatten)]
+    list_args: ListArgs,
 }
 
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListDeviceCertificateParams {
-            organization_name: global_options
-                .organization_name
-                .as_ref()
-                .unwrap()
-                .to_string(),
-            product_name: self.inner.product_name,
-            device_identifier: self.inner.device_identifier,
+            list: ListParams::from_args(&self.inner.list_args),
         };
 
         let api = Api::from_options(global_options);
@@ -216,7 +167,7 @@ impl Command<ListCommand> {
             .await
             .context(ApiSnafu)?
         {
-            Some(device_certificate) => print_json!(&device_certificate),
+            Some(device_certificates) => print_json!(&device_certificates),
             None => panic!(),
         }
 
