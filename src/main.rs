@@ -88,9 +88,6 @@ pub struct GlobalOptions {
     #[arg(long, env = "PERIDIO_CA_PATH", short = 'c')]
     ca_path: Option<PathBuf>,
 
-    #[arg(long, env = "PERIDIO_ORGANIZATION_NAME", short = 'o')]
-    organization_name: Option<String>,
-
     #[arg(long, env = "PERIDIO_PROFILE", short = 'p')]
     profile: Option<String>,
 
@@ -146,12 +143,6 @@ impl Program {
                                     self.global_options.ca_path = Some(ca_path.into());
                                 };
                             };
-
-                            if self.global_options.organization_name.is_none() {
-                                if let Some(organization_name) = profile.organization_name {
-                                    self.global_options.organization_name = Some(organization_name);
-                                };
-                            }
                         }
                     }
 

@@ -38,11 +38,6 @@ fn without_command_usage_is_shown() {
                 .and(predicates::str::contains("[env: PERIDIO_CA_PATH=]")),
         )
         .stderr(
-            predicates::str::contains("-o, --organization-name <ORGANIZATION_NAME>").and(
-                predicates::str::contains("[env: PERIDIO_ORGANIZATION_NAME=]"),
-            ),
-        )
-        .stderr(
             predicates::str::contains("-p, --profile <PROFILE>")
                 .and(predicates::str::contains("[env: PERIDIO_PROFILE=]")),
         )
@@ -404,7 +399,6 @@ fn config_init_creates_profile() {
 
     // Prepare test values
     let profile_name = "test-profile";
-    let org_name = "test-org";
     let api_key = "test-api-key";
 
     // Run config init with simulated input
@@ -413,7 +407,6 @@ fn config_init_creates_profile() {
         .args(["--config-directory", &temp_dir_path])
         .args(["config", "profiles", "create"])
         .args(["--name", profile_name])
-        .args(["--organization-name", org_name])
         .args(["--api-key", api_key])
         .args(["--no-input"])
         .assert()
@@ -433,10 +426,6 @@ fn config_init_creates_profile() {
     assert_eq!(config["version"], 2);
     assert!(config["profiles"].is_object());
     assert!(config["profiles"][profile_name].is_object());
-    assert_eq!(
-        config["profiles"][profile_name]["organization_name"],
-        org_name
-    );
 
     // Verify credentials.json file
     let creds_path = temp_dir.path().join("credentials.json");

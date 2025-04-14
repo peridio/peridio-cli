@@ -1563,7 +1563,7 @@ dependencies = [
 [[package]]
 name = "peridio-sdk"
 version = "1.0.0"
-source = "git+https://github.com/peridio/peridio-rust.git?branch=jwong%2Frsdk-7-expose-last_connected_at-in-list-devices-and-retrieve-a#3b2bb930562e1031f24889082e564ab399eb6e71"
+source = "git+https://github.com/peridio/peridio-rust.git?branch=jwong%2Frsdk-11-clean-up-deploymentsfirmwares#ae32043df2f0d9a9db8b9194f1d933281ad9ed09"
 dependencies = [
  "chrono",
  "reqwest",
