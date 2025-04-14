@@ -2,7 +2,6 @@ use super::Command;
 use crate::print_json;
 use crate::utils::list::ListArgs;
 use crate::utils::maybe_json;
-use crate::utils::sdk_extensions::{ApiExt, ListExt};
 use crate::utils::PRNType;
 use crate::utils::PRNValueParser;
 use crate::ApiSnafu;
@@ -188,7 +187,7 @@ impl CreateCommand {
         &mut self,
         global_options: GlobalOptions,
     ) -> Result<Option<CreateBinaryResponse>, Error> {
-        let api = Api::from_options(global_options.clone());
+        let api = Api::from(global_options.clone());
         self.global_options = Some(global_options.clone());
 
         let binary = match self.get_or_create_binary(&api).await? {
@@ -734,11 +733,7 @@ impl Command<DeleteCommand> {
             prn: self.inner.prn,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from(global_options);
 
         api.binaries().delete(params).await.context(ApiSnafu)?;
 
@@ -755,10 +750,10 @@ pub struct ListCommand {
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListBinariesParams {
-            list: ListParams::from_args(&self.inner.list_args),
+            list: ListParams::from(self.inner.list_args),
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.binaries().list(params).await.context(ApiSnafu)? {
             Some(binary) => print_json!(&binary),
@@ -789,7 +784,7 @@ impl GetCommand {
         let api = if let Some(api) = self.api {
             api
         } else {
-            Api::from_options(global_options)
+            Api::from(global_options)
         };
 
         api.binaries().get(params).await.context(ApiSnafu)
@@ -857,7 +852,7 @@ impl UpdateCommand {
         let api = if let Some(api) = self.api {
             api
         } else {
-            Api::from_options(global_options)
+            Api::from(global_options)
         };
 
         api.binaries().update(params).await.context(ApiSnafu)

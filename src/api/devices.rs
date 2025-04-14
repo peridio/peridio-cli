@@ -1,7 +1,6 @@
 use super::Command;
 use crate::print_json;
 use crate::utils::list::ListArgs;
-use crate::utils::sdk_extensions::{ApiExt, ListExt};
 use crate::utils::PRNType;
 use crate::utils::PRNValueParser;
 use crate::ApiSnafu;
@@ -92,7 +91,7 @@ impl Command<CreateCommand> {
             product_prn: self.inner.product_prn,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.devices().create(params).await.context(ApiSnafu)? {
             Some(device) => print_json!(&device),
@@ -116,7 +115,7 @@ impl Command<DeleteCommand> {
             prn: self.inner.prn,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         if (api.devices().delete(params).await.context(ApiSnafu)?).is_some() {
             panic!()
@@ -139,7 +138,7 @@ impl Command<GetCommand> {
             prn: self.inner.prn,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.devices().get(params).await.context(ApiSnafu)? {
             Some(device) => print_json!(&device),
@@ -159,10 +158,10 @@ pub struct ListCommand {
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListDeviceParams {
-            list: ListParams::from_args(&self.inner.list_args),
+            list: ListParams::from(self.inner.list_args),
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.devices().list(params).await.context(ApiSnafu)? {
             Some(devices) => print_json!(&devices),
@@ -219,7 +218,7 @@ impl Command<UpdateCommand> {
             target: self.inner.target,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.devices().update(params).await.context(ApiSnafu)? {
             Some(device) => print_json!(&device),
@@ -271,7 +270,7 @@ impl Command<GetUpdateCommand> {
             write: self.inner.write,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.devices().get_update(params).await.context(ApiSnafu)? {
             Some(device_update) => print_json!(&device_update),

@@ -1,7 +1,6 @@
 use super::Command;
 use crate::print_json;
 use crate::utils::list::ListArgs;
-use crate::utils::sdk_extensions::{ApiExt, ListExt};
 use crate::utils::PRNType;
 use crate::utils::PRNValueParser;
 use crate::ApiSnafu;
@@ -78,7 +77,7 @@ impl Command<CreateCommand> {
             url: self.inner.url,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.webhooks().create(params).await.context(ApiSnafu)? {
             Some(webhook) => print_json!(&webhook),
@@ -98,10 +97,10 @@ pub struct ListCommand {
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListWebhooksParams {
-            list: ListParams::from_args(&self.inner.list_args),
+            list: ListParams::from(self.inner.list_args),
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.webhooks().list(params).await.context(ApiSnafu)? {
             Some(webhook) => print_json!(&webhook),
@@ -128,7 +127,7 @@ impl Command<GetCommand> {
             prn: self.inner.prn,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.webhooks().get(params).await.context(ApiSnafu)? {
             Some(webhook) => print_json!(&webhook),
@@ -152,7 +151,7 @@ impl Command<RollSecretCommand> {
             prn: self.inner.prn,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.webhooks().roll_secret(params).await.context(ApiSnafu)? {
             Some(webhook) => print_json!(&webhook),
@@ -176,7 +175,7 @@ impl Command<TestFireCommand> {
             prn: self.inner.prn,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.webhooks().test_fire(params).await.context(ApiSnafu)? {
             Some(webhook) => print_json!(&webhook),
@@ -224,7 +223,7 @@ impl Command<UpdateCommand> {
             url: self.inner.url,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.webhooks().update(params).await.context(ApiSnafu)? {
             Some(device) => print_json!(&device),
@@ -251,7 +250,7 @@ impl Command<DeleteCommand> {
             webhook_prn: self.inner.webhook_prn,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         if (api.webhooks().delete(params).await.context(ApiSnafu)?).is_some() {
             panic!()

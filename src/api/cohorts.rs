@@ -1,7 +1,6 @@
 use super::Command;
 use crate::print_json;
 use crate::utils::list::ListArgs;
-use crate::utils::sdk_extensions::{ApiExt, ListExt};
 use crate::utils::PRNType;
 use crate::utils::PRNValueParser;
 use crate::ApiSnafu;
@@ -69,7 +68,7 @@ impl Command<CreateCommand> {
             product_prn: self.inner.product_prn,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.cohorts().create(params).await.context(ApiSnafu)? {
             Some(cohort) => print_json!(&cohort),
@@ -89,10 +88,10 @@ pub struct ListCommand {
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListCohortsParams {
-            list: ListParams::from_args(&self.inner.list_args),
+            list: ListParams::from(self.inner.list_args),
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.cohorts().list(params).await.context(ApiSnafu)? {
             Some(cohort) => print_json!(&cohort),
@@ -119,7 +118,7 @@ impl Command<GetCommand> {
             prn: self.inner.prn,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.cohorts().get(params).await.context(ApiSnafu)? {
             Some(cohort) => print_json!(&cohort),
@@ -156,7 +155,7 @@ impl Command<UpdateCommand> {
             name: self.inner.name,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.cohorts().update(params).await.context(ApiSnafu)? {
             Some(cohort) => print_json!(&cohort),

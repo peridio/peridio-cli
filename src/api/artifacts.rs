@@ -4,7 +4,6 @@ use super::Command;
 use crate::print_json;
 use crate::utils::list::ListArgs;
 use crate::utils::maybe_json;
-use crate::utils::sdk_extensions::{ApiExt, ListExt};
 use crate::utils::PRNType;
 use crate::utils::PRNValueParser;
 use crate::ApiSnafu;
@@ -92,7 +91,7 @@ impl Command<CreateCommand> {
             organization_prn: self.inner.organization_prn,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.artifacts().create(params).await.context(ApiSnafu)? {
             Some(artifact) => print_json!(&artifact),
@@ -119,11 +118,7 @@ impl Command<DeleteCommand> {
             prn: self.inner.prn,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from(global_options);
 
         api.artifacts().delete(params).await.context(ApiSnafu)?;
 
@@ -140,10 +135,10 @@ pub struct ListCommand {
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListArtifactsParams {
-            list: ListParams::from_args(&self.inner.list_args),
+            list: ListParams::from(self.inner.list_args),
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.artifacts().list(params).await.context(ApiSnafu)? {
             Some(artifact) => print_json!(&artifact),
@@ -170,7 +165,7 @@ impl Command<GetCommand> {
             prn: self.inner.prn,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.artifacts().get(params).await.context(ApiSnafu)? {
             Some(artifact) => print_json!(&artifact),
@@ -212,7 +207,7 @@ impl Command<UpdateCommand> {
             name: self.inner.name,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.artifacts().update(params).await.context(ApiSnafu)? {
             Some(device) => print_json!(&device),
