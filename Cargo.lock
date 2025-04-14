@@ -1563,7 +1563,7 @@ dependencies = [
 [[package]]
 name = "peridio-sdk"
 version = "1.0.0"
-source = "git+https://github.com/peridio/peridio-rust.git?branch=jwong%2Frsdk-9-v2-ca_certificates#423366ff7bca30e83b5e12bd34066b861da8610e"
+source = "git+https://github.com/peridio/peridio-rust.git?branch=jwong%2Frsdk-11-clean-up-deploymentsfirmwares#ae32043df2f0d9a9db8b9194f1d933281ad9ed09"
 dependencies = [
  "chrono",
  "reqwest",
