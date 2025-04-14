@@ -3,7 +3,6 @@ use std::io;
 
 use super::Command;
 use crate::print_json;
-use crate::utils::sdk_extensions::ApiExt;
 use crate::utils::PRNType;
 use crate::utils::PRNValueParser;
 use crate::utils::Style;
@@ -181,7 +180,7 @@ impl CreateCommand {
         let api = if let Some(api) = self.api {
             api
         } else {
-            Api::from_options(global_options)
+            Api::from(global_options)
         };
 
         api.binary_signatures()
@@ -244,7 +243,7 @@ impl Command<DeleteCommand> {
             binary_signature_prn: self.inner.binary_signature_prn,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api
             .binary_signatures()

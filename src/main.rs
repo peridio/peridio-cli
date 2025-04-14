@@ -11,6 +11,8 @@ use std::{
 
 use clap::Parser;
 use config::Config;
+use peridio_sdk::api::ApiOptions;
+use peridio_sdk::Api;
 use snafu::Snafu;
 
 use crate::config::config_v2::{CertificateAuthoritiesV2, SigningKeyPairsV2};
@@ -104,6 +106,16 @@ pub struct GlobalOptions {
 
     #[clap(skip)]
     certificate_authorities: Option<CertificateAuthoritiesV2>,
+}
+
+impl From<GlobalOptions> for Api {
+    fn from(options: GlobalOptions) -> Self {
+        Api::new(ApiOptions {
+            api_key: options.api_key.unwrap(),
+            endpoint: options.base_url,
+            ca_bundle_path: options.ca_path,
+        })
+    }
 }
 
 impl Program {
