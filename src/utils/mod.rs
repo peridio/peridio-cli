@@ -1,5 +1,4 @@
 pub mod list;
-pub mod sdk_extensions;
 pub mod serde_introspection;
 
 use clap::error::{ContextKind, ContextValue, ErrorKind};

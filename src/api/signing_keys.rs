@@ -8,7 +8,6 @@ use crate::config::config_v2::SigningKeyPairV2;
 use crate::print_json;
 use crate::utils::list::ListArgs;
 use crate::utils::maybe_config_directory;
-use crate::utils::sdk_extensions::{ApiExt, ListExt};
 use crate::utils::PRNType;
 use crate::utils::PRNValueParser;
 use crate::AlreadyExistingFileSnafu;
@@ -221,7 +220,7 @@ impl Command<CreateCommand> {
             organization_prn: self.inner.organization_prn,
         };
 
-        let api = Api::from_options(global_options.clone());
+        let api = Api::from(global_options.clone());
 
         match api.signing_keys().create(params).await.context(ApiSnafu)? {
             Some(key) => {
@@ -292,7 +291,7 @@ impl Command<GetCommand> {
             prn: self.inner.prn,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.signing_keys().get(params).await.context(ApiSnafu)? {
             Some(key) => print_json!(&key),
@@ -312,10 +311,10 @@ pub struct ListCommand {
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListSigningKeysParams {
-            list: ListParams::from_args(&self.inner.list_args),
+            list: ListParams::from(self.inner.list_args),
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.signing_keys().list(params).await.context(ApiSnafu)? {
             Some(signing_key) => print_json!(&signing_key),
@@ -342,7 +341,7 @@ impl Command<DeleteCommand> {
             signing_key_prn: self.inner.signing_key_prn,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         if (api.signing_keys().delete(params).await.context(ApiSnafu)?).is_some() {
             panic!()
