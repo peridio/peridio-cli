@@ -33,10 +33,6 @@ pub struct CreateCommand {
     #[arg(long)]
     name: String,
 
-    /// The profile's organization_name.
-    #[arg(long)]
-    organization_name: String,
-
     /// The profile's api_key. Can be omitted to supply the value interactively.
     #[arg(long, required_if_eq("no_input", "true"))]
     api_key: Option<String>,
@@ -61,7 +57,6 @@ impl Command<CreateCommand> {
         let credentials_path = config_dir_path.join("credentials.json");
 
         let profile_name = self.inner.name.trim().to_string();
-        let organization_name = self.inner.organization_name.trim().to_string();
 
         let api_key = if self.inner.no_input {
             self.inner.api_key.unwrap()
@@ -82,7 +77,6 @@ impl Command<CreateCommand> {
             api_key: None,  // We'll store this in the credentials file
             base_url: None, // Use default
             ca_path: None,  // Use default
-            organization_name: Some(organization_name),
         };
 
         // Load or create config file
