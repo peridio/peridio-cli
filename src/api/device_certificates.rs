@@ -1,7 +1,6 @@
 use super::Command;
 use crate::print_json;
 use crate::utils::list::ListArgs;
-use crate::utils::sdk_extensions::{ApiExt, ListExt};
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
@@ -73,7 +72,7 @@ impl Command<CreateCommand> {
             certificate: encoded_certificate,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api
             .device_certificates()
@@ -102,7 +101,7 @@ impl Command<DeleteCommand> {
             prn: self.inner.prn,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         if (api
             .device_certificates()
@@ -131,7 +130,7 @@ impl Command<GetCommand> {
             prn: self.inner.prn,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api
             .device_certificates()
@@ -156,10 +155,10 @@ pub struct ListCommand {
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListDeviceCertificateParams {
-            list: ListParams::from_args(&self.inner.list_args),
+            list: ListParams::from(self.inner.list_args),
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api
             .device_certificates()

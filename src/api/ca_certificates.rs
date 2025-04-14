@@ -1,6 +1,5 @@
 use super::Command;
 use crate::utils::list::ListArgs;
-use crate::utils::sdk_extensions::{ApiExt, ListExt};
 use crate::{print_json, ApiSnafu, Error, GlobalOptions, NonExistingPathSnafu};
 use base64::{engine::general_purpose, Engine as _};
 use clap::Parser;
@@ -74,7 +73,7 @@ impl Command<CreateCommand> {
             description: self.inner.description,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api
             .ca_certificates()
@@ -103,7 +102,7 @@ impl Command<DeleteCommand> {
             prn: self.inner.prn,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         if (api
             .ca_certificates()
@@ -131,7 +130,7 @@ impl Command<GetCommand> {
             prn: self.inner.prn,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.ca_certificates().get(params).await.context(ApiSnafu)? {
             Some(ca_certificate) => print_json!(&ca_certificate),
@@ -151,10 +150,10 @@ pub struct ListCommand {
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListCaCertificateParams {
-            list: ListParams::from_args(&self.inner.list_args),
+            list: ListParams::from(self.inner.list_args),
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.ca_certificates().list(params).await.context(ApiSnafu)? {
             Some(ca_certificates) => print_json!(&ca_certificates),
@@ -183,7 +182,7 @@ impl Command<UpdateCommand> {
             description: self.inner.description,
         };
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api
             .ca_certificates()
@@ -209,7 +208,7 @@ impl Command<CreateVerificationCodeCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = CreateVerificationCodeParams {};
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api
             .ca_certificates()

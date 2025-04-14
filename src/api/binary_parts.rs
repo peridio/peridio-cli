@@ -1,6 +1,5 @@
 use super::Command;
 use crate::print_json;
-use crate::utils::sdk_extensions::ApiExt;
 use crate::utils::PRNType;
 use crate::utils::PRNValueParser;
 use crate::ApiSnafu;
@@ -93,7 +92,7 @@ impl CreateCommand {
         let api = if let Some(api) = self.api {
             api
         } else {
-            Api::from_options(global_options)
+            Api::from(global_options)
         };
 
         api.binary_parts().create(params).await.context(ApiSnafu)
@@ -135,7 +134,7 @@ impl ListCommand {
         let api = if let Some(api) = self.api {
             api
         } else {
-            Api::from_options(global_options)
+            Api::from(global_options)
         };
 
         api.binary_parts().list(params).await.context(ApiSnafu)

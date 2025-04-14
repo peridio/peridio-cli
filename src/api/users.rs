@@ -1,7 +1,6 @@
 use super::Command;
 use crate::api::CliCommands;
 use crate::print_json;
-use crate::utils::sdk_extensions::ApiExt;
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
@@ -36,7 +35,7 @@ impl Command<MeCommand> {
 
         CliCommands::print_missing_arguments(missing_arguments);
 
-        let api = Api::from_options(global_options);
+        let api = Api::from(global_options);
 
         match api.users().me().await.context(ApiSnafu)? {
             Some(users_me) => print_json!(&users_me),
