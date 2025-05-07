@@ -39,7 +39,10 @@ impl TunnelsCommand {
 #[derive(Parser, Debug)]
 pub struct CreateCommand {
     /// An optional list of CIDR blocks that can use the resource.
-    #[arg(long)]
+    ///
+    /// Values can be provided by passing each value in a flag
+    /// or by delimiting all values with ","
+    #[arg(long, value_delimiter = ',')]
     cidr_block_allowlist: Option<Vec<String>>,
 
     /// The PRN of the device you wish to create the resource for.

@@ -57,6 +57,9 @@ pub struct CreateCommand {
     name: String,
 
     /// A list of tags that must be present on a device for it to be eligible for this deployment.
+    ///
+    /// Values can be provided by passing each value in a flag
+    /// or by delimiting all values with ","
     #[arg(long, required = true, num_args = 0.., value_delimiter = ',')]
     tags: Vec<String>,
 
@@ -218,6 +221,9 @@ pub struct UpdateCommand {
     name: Option<String>,
 
     /// A list of tags that must be present on a device for it to be eligible for this deployment.
+    ///
+    /// Values can be provided by passing each value in a flag
+    /// or by delimiting all values with ","
     #[arg(long, num_args = 0.., value_delimiter = ',')]
     tags: Option<Vec<String>>,
 

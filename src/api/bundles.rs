@@ -36,7 +36,10 @@ impl BundlesCommand {
 
 pub struct CreateCommand {
     /// The PRNs of the artifact versions to include binaries from in the bundle.
-    #[clap(short, long, value_parser, num_args = 1.., value_delimiter = ' ')]
+    ///
+    /// Values can be provided by passing each value in a flag
+    /// or by delimiting all values with ","
+    #[clap(short, long, value_parser, num_args = 1.., value_delimiter = ',')]
     artifact_version_prns: Vec<String>,
 
     /// A user provided custom UUID id for the bundle database record.

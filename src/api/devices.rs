@@ -68,6 +68,9 @@ pub struct CreateCommand {
     /// A list of tags to attach to the device.
     ///
     /// If using firmwares and deployments, tags can be used to target devices.
+    ///
+    /// Values can be provided by passing each value in a flag
+    /// or by delimiting all values with ","
     #[arg(long, num_args = 0.., value_delimiter = ',')]
     tags: Option<Vec<String>>,
 
@@ -233,6 +236,9 @@ pub struct UpdateCommand {
     product_name: String,
 
     /// A list of tags to attach to the device.
+    ///
+    /// Values can be provided by passing each value in a flag
+    /// or by delimiting all values with ","
     #[arg(long, num_args = 0.., value_delimiter = ',')]
     tags: Option<Vec<String>>,
 
