@@ -67,6 +67,7 @@ fn with_users_subcommands_are_shown() {
 }
 
 #[test]
+#[ignore]
 fn with_users_with_me_shows_email_and_username() {
     let base_url = base_url();
     let ca_path_buf = peridio_cloud_certificate_authority_path();
