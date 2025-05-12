@@ -12,7 +12,8 @@ use crate::GlobalOptions;
 use crate::NonExistingPathSnafu;
 use clap::Parser;
 use peridio_sdk::api::artifacts::{
-    CreateArtifactParams, GetArtifactParams, ListArtifactsParams, UpdateArtifactParams,
+    CreateArtifactParams, DeleteArtifactParams, GetArtifactParams, ListArtifactsParams,
+    UpdateArtifactParams,
 };
 use peridio_sdk::api::Api;
 use peridio_sdk::api::ApiOptions;
@@ -24,6 +25,7 @@ pub enum ArtifactsCommand {
     List(Command<ListCommand>),
     Get(Command<GetCommand>),
     Update(Command<UpdateCommand>),
+    Delete(Command<DeleteCommand>),
 }
 
 impl ArtifactsCommand {
@@ -33,6 +35,7 @@ impl ArtifactsCommand {
             Self::List(cmd) => cmd.run(global_options).await,
             Self::Get(cmd) => cmd.run(global_options).await,
             Self::Update(cmd) => cmd.run(global_options).await,
+            Self::Delete(cmd) => cmd.run(global_options).await,
         }
     }
 }
@@ -98,6 +101,34 @@ impl Command<CreateCommand> {
             Some(artifact) => print_json!(&artifact),
             None => panic!(),
         }
+
+        Ok(())
+    }
+}
+
+#[derive(Parser, Debug)]
+pub struct DeleteCommand {
+    /// The PRN of the resource to delete.
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Artifact)
+    )]
+    prn: String,
+}
+
+impl Command<DeleteCommand> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+        let params = DeleteArtifactParams {
+            prn: self.inner.prn,
+        };
+
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
+        });
+
+        api.artifacts().delete(params).await.context(ApiSnafu)?;
 
         Ok(())
     }
