@@ -7,8 +7,9 @@ use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
 use clap::Parser;
-use peridio_sdk::api::bundles::UpdateBundleParams;
-use peridio_sdk::api::bundles::{CreateBundleParams, GetBundleParams, ListBundlesParams};
+use peridio_sdk::api::bundles::{
+    CreateBundleParams, DeleteBundleParams, GetBundleParams, ListBundlesParams, UpdateBundleParams,
+};
 use peridio_sdk::api::Api;
 use peridio_sdk::api::ApiOptions;
 use snafu::ResultExt;
@@ -19,6 +20,7 @@ pub enum BundlesCommand {
     List(Command<ListCommand>),
     Get(Command<GetCommand>),
     Update(Command<UpdateCommand>),
+    Delete(Command<DeleteCommand>),
 }
 
 impl BundlesCommand {
@@ -28,6 +30,7 @@ impl BundlesCommand {
             Self::List(cmd) => cmd.run(global_options).await,
             Self::Get(cmd) => cmd.run(global_options).await,
             Self::Update(cmd) => cmd.run(global_options).await,
+            Self::Delete(cmd) => cmd.run(global_options).await,
         }
     }
 }
@@ -77,6 +80,34 @@ impl Command<CreateCommand> {
             Some(bundle) => print_json!(&bundle),
             None => panic!(),
         }
+
+        Ok(())
+    }
+}
+
+#[derive(Parser, Debug)]
+pub struct DeleteCommand {
+    /// The PRN of the resource to delete.
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Bundle)
+    )]
+    prn: String,
+}
+
+impl Command<DeleteCommand> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+        let params = DeleteBundleParams {
+            prn: self.inner.prn,
+        };
+
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
+        });
+
+        api.bundles().delete(params).await.context(ApiSnafu)?;
 
         Ok(())
     }
