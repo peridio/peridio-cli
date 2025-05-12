@@ -12,8 +12,8 @@ use crate::GlobalOptions;
 use crate::NonExistingPathSnafu;
 use clap::Parser;
 use peridio_sdk::api::artifact_versions::{
-    CreateArtifactVersionParams, GetArtifactVersionParams, ListArtifactVersionsParams,
-    UpdateArtifactVersionParams,
+    CreateArtifactVersionParams, DeleteArtifactVersionParams, GetArtifactVersionParams,
+    ListArtifactVersionsParams, UpdateArtifactVersionParams,
 };
 use peridio_sdk::api::{Api, ApiOptions};
 use snafu::ResultExt;
@@ -24,6 +24,7 @@ pub enum ArtifactVersionsCommand {
     List(Command<ListCommand>),
     Get(Command<GetCommand>),
     Update(Command<UpdateCommand>),
+    Delete(Command<DeleteCommand>),
 }
 
 impl ArtifactVersionsCommand {
@@ -33,6 +34,7 @@ impl ArtifactVersionsCommand {
             Self::List(cmd) => cmd.run(global_options).await,
             Self::Get(cmd) => cmd.run(global_options).await,
             Self::Update(cmd) => cmd.run(global_options).await,
+            Self::Delete(cmd) => cmd.run(global_options).await,
         }
     }
 }
@@ -102,6 +104,37 @@ impl Command<CreateCommand> {
             Some(artifact_version) => print_json!(&artifact_version),
             None => panic!(),
         }
+
+        Ok(())
+    }
+}
+
+#[derive(Parser, Debug)]
+pub struct DeleteCommand {
+    /// The PRN of the resource to delete.
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::ArtifactVersion)
+    )]
+    prn: String,
+}
+
+impl Command<DeleteCommand> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+        let params = DeleteArtifactVersionParams {
+            prn: self.inner.prn,
+        };
+
+        let api = Api::new(ApiOptions {
+            api_key: global_options.api_key.unwrap(),
+            endpoint: global_options.base_url,
+            ca_bundle_path: global_options.ca_path,
+        });
+
+        api.artifact_versions()
+            .delete(params)
+            .await
+            .context(ApiSnafu)?;
 
         Ok(())
     }
