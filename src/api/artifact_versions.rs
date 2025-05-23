@@ -1,8 +1,8 @@
 use std::fs;
 
 use super::Command;
-use crate::api::list::ListArgs;
 use crate::print_json;
+use crate::utils::list::ListArgs;
 use crate::utils::maybe_json;
 use crate::utils::PRNType;
 use crate::utils::PRNValueParser;
@@ -15,7 +15,8 @@ use peridio_sdk::api::artifact_versions::{
     CreateArtifactVersionParams, DeleteArtifactVersionParams, GetArtifactVersionParams,
     ListArtifactVersionsParams, UpdateArtifactVersionParams,
 };
-use peridio_sdk::api::{Api, ApiOptions};
+use peridio_sdk::api::Api;
+use peridio_sdk::list_params::ListParams;
 use snafu::ResultExt;
 
 #[derive(Parser, Debug)]
@@ -89,11 +90,7 @@ impl Command<CreateCommand> {
             version: self.inner.version,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from(global_options);
 
         match api
             .artifact_versions()
@@ -125,11 +122,7 @@ impl Command<DeleteCommand> {
             prn: self.inner.prn,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from(global_options);
 
         api.artifact_versions()
             .delete(params)
@@ -149,17 +142,10 @@ pub struct ListCommand {
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListArtifactVersionsParams {
-            limit: self.inner.list_args.limit,
-            order: self.inner.list_args.order,
-            search: self.inner.list_args.search,
-            page: self.inner.list_args.page,
+            list: ListParams::from(self.inner.list_args),
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from(global_options);
 
         match api
             .artifact_versions()
@@ -191,11 +177,7 @@ impl Command<GetCommand> {
             prn: self.inner.prn,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from(global_options);
 
         match api
             .artifact_versions()
@@ -237,11 +219,7 @@ impl Command<UpdateCommand> {
             description: self.inner.description,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from(global_options);
 
         match api
             .artifact_versions()
