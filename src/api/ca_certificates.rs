@@ -1,16 +1,16 @@
 use super::Command;
-use crate::utils::{PRNType, PRNValueParser};
+use crate::utils::list::ListArgs;
 use crate::{print_json, ApiSnafu, Error, GlobalOptions, NonExistingPathSnafu};
 use base64::{engine::general_purpose, Engine as _};
 use clap::Parser;
-use peridio_sdk::api::ca_certificates::CaCertificateJitp;
 use peridio_sdk::api::ca_certificates::CreateCaCertificateParams;
 use peridio_sdk::api::ca_certificates::CreateVerificationCodeParams;
 use peridio_sdk::api::ca_certificates::DeleteCaCertificateParams;
 use peridio_sdk::api::ca_certificates::GetCaCertificateParams;
 use peridio_sdk::api::ca_certificates::ListCaCertificateParams;
 use peridio_sdk::api::ca_certificates::UpdateCaCertificateParams;
-use peridio_sdk::api::{Api, ApiOptions};
+use peridio_sdk::api::Api;
+use peridio_sdk::list_params::ListParams;
 use snafu::ResultExt;
 use std::fs;
 use std::path::PathBuf;
@@ -51,32 +51,6 @@ pub struct CreateCommand {
     /// An arbitrary string attached to the resource. Often useful for displaying to users.
     #[arg(long)]
     description: Option<String>,
-
-    /// An arbitrary string attached to the jitp resource. Often useful for displaying to users.
-    #[arg(long, requires_all = &["jitp_tags", "jitp_product_name"])]
-    jitp_description: Option<String>,
-
-    /// Tags that will be automatically applied to devices that JITP with this CA certificate.
-    ///
-    /// Values can be provided by passing each value in a flag
-    /// or by delimiting all values with ","
-    #[arg(long, requires_all = &["jitp_description", "jitp_product_name"], num_args = 0.., value_delimiter = ',')]
-    jitp_tags: Vec<String>,
-
-    /// The target that will be automatically applied to devices that JITP with this CA certificate.
-    #[arg(long)]
-    jitp_target: Option<String>,
-
-    /// The product that will be automatically applied to devices that JITP with this CA certificate.
-    #[arg(long, requires_all = &["jitp_tags", "jitp_description"])]
-    jitp_product_name: Option<String>,
-
-    /// The cohort that will be automatically applied to devices that JITP with this CA certificate.
-    #[arg(
-        long,
-        value_parser = PRNValueParser::new(PRNType::Cohort)
-    )]
-    jitp_cohort_prn: Option<String>,
 }
 
 impl Command<CreateCommand> {
@@ -93,35 +67,13 @@ impl Command<CreateCommand> {
         let cert_base64 = general_purpose::STANDARD.encode(cert);
         let verification_cert_base64 = general_purpose::STANDARD.encode(verification_cert);
 
-        let jitp = if let (Some(description), true, Some(product_name)) = (
-            self.inner.jitp_description,
-            !self.inner.jitp_tags.is_empty(),
-            self.inner.jitp_product_name,
-        ) {
-            Some(CaCertificateJitp {
-                description,
-                tags: self.inner.jitp_tags,
-                target: self.inner.jitp_target,
-                product_name,
-                cohort_prn: self.inner.jitp_cohort_prn,
-            })
-        } else {
-            None
-        };
-
         let params = CreateCaCertificateParams {
-            organization_name: global_options.organization_name.unwrap(),
             certificate: cert_base64,
             verification_certificate: verification_cert_base64,
             description: self.inner.description,
-            jitp,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from(global_options);
 
         match api
             .ca_certificates()
@@ -139,23 +91,18 @@ impl Command<CreateCommand> {
 
 #[derive(Parser, Debug)]
 pub struct DeleteCommand {
-    /// The serial of the CA certificate to delete.
+    /// The prn of the CA certificate to delete.
     #[arg(long)]
-    ca_certificate_serial: String,
+    prn: String,
 }
 
 impl Command<DeleteCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = DeleteCaCertificateParams {
-            organization_name: global_options.organization_name.unwrap(),
-            ca_certificate_serial: self.inner.ca_certificate_serial,
+            prn: self.inner.prn,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from(global_options);
 
         if (api
             .ca_certificates()
@@ -174,21 +121,16 @@ impl Command<DeleteCommand> {
 #[derive(Parser, Debug)]
 pub struct GetCommand {
     #[arg(long)]
-    ca_certificate_serial: String,
+    prn: String,
 }
 
 impl Command<GetCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = GetCaCertificateParams {
-            organization_name: global_options.organization_name.unwrap(),
-            ca_certificate_serial: self.inner.ca_certificate_serial,
+            prn: self.inner.prn,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from(global_options);
 
         match api.ca_certificates().get(params).await.context(ApiSnafu)? {
             Some(ca_certificate) => print_json!(&ca_certificate),
@@ -200,19 +142,18 @@ impl Command<GetCommand> {
 }
 
 #[derive(Parser, Debug)]
-pub struct ListCommand {}
+pub struct ListCommand {
+    #[clap(flatten)]
+    list_args: ListArgs,
+}
 
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListCaCertificateParams {
-            organization_name: global_options.organization_name.unwrap(),
+            list: ListParams::from(self.inner.list_args),
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from(global_options);
 
         match api.ca_certificates().list(params).await.context(ApiSnafu)? {
             Some(ca_certificates) => print_json!(&ca_certificates),
@@ -225,79 +166,23 @@ impl Command<ListCommand> {
 
 #[derive(Parser, Debug)]
 pub struct UpdateCommand {
-    /// The serial of the CA certificate to update.
+    /// The prn of the CA certificate to update.
     #[arg(long)]
-    ca_certificate_serial: String,
+    prn: String,
 
     /// An arbitrary string attached to the resource. Often useful for displaying to users.
     #[arg(long)]
     description: Option<String>,
-
-    /// Pass this option to disable JITP for this CA certificate.
-    #[arg(long, conflicts_with_all = &["jitp_description", "jitp_tags", "jitp_product_name"])]
-    disable_jitp: bool,
-
-    /// An arbitrary string attached to the jitp resource. Often useful for displaying to users.
-    #[arg(long, requires_all = &["jitp_tags", "jitp_product_name"])]
-    jitp_description: Option<String>,
-
-    /// Tags that will be automatically applied to devices that JITP with this CA certificate.
-    ///
-    /// Values can be provided by passing each value in a flag
-    /// or by delimiting all values with ","
-    #[arg(long, requires_all = &["jitp_description", "jitp_product_name"], num_args = 0.., value_delimiter = ',')]
-    jitp_tags: Vec<String>,
-
-    /// The target that will be automatically applied to devices that JITP with this CA certificate.
-    #[arg(long)]
-    jitp_target: Option<String>,
-
-    /// The product that will be automatically applied to devices that JITP with this CA certificate.
-    #[arg(long, requires_all = &["jitp_tags", "jitp_description"])]
-    jitp_product_name: Option<String>,
-
-    /// The cohort that will be automatically applied to devices that JITP with this CA certificate.
-    #[arg(
-        long,
-        value_parser = PRNValueParser::new(PRNType::Cohort)
-    )]
-    jitp_cohort_prn: Option<String>,
 }
 
 impl Command<UpdateCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
-        let jitp = if self.inner.disable_jitp {
-            // disable jitp
-            Some(None)
-        } else if let (Some(description), true, Some(product_name)) = (
-            self.inner.jitp_description,
-            !self.inner.jitp_tags.is_empty(),
-            self.inner.jitp_product_name,
-        ) {
-            Some(Some(CaCertificateJitp {
-                description,
-                tags: self.inner.jitp_tags,
-                target: self.inner.jitp_target,
-                product_name,
-                cohort_prn: self.inner.jitp_cohort_prn,
-            }))
-        } else {
-            //do nothing
-            None
-        };
-
         let params = UpdateCaCertificateParams {
-            organization_name: global_options.organization_name.unwrap(),
-            ca_certificate_serial: self.inner.ca_certificate_serial,
+            prn: self.inner.prn,
             description: self.inner.description,
-            jitp,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from(global_options);
 
         match api
             .ca_certificates()
@@ -321,15 +206,9 @@ pub struct CreateVerificationCodeCommand {}
 
 impl Command<CreateVerificationCodeCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
-        let params = CreateVerificationCodeParams {
-            organization_name: global_options.organization_name.unwrap(),
-        };
+        let params = CreateVerificationCodeParams {};
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from(global_options);
 
         match api
             .ca_certificates()

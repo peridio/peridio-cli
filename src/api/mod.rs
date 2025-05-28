@@ -7,13 +7,9 @@ mod bundles;
 mod ca_certificates;
 mod cohorts;
 mod config;
-mod deployments;
 mod device_certificates;
 mod devices;
-mod firmwares;
-mod list;
 mod products;
-mod products_v2;
 mod releases;
 mod signing_keys;
 mod tunnels;
@@ -72,17 +68,11 @@ pub enum ApiCommand {
     #[command(subcommand)]
     Cohorts(cohorts::CohortsCommand),
     #[command(subcommand)]
-    Deployments(deployments::DeploymentsCommand),
-    #[command(subcommand)]
     Devices(devices::DevicesCommand),
     #[command(subcommand)]
     DeviceCertificates(device_certificates::DeviceCertificatesCommand),
     #[command(subcommand)]
-    Firmwares(firmwares::FirmwaresCommand),
-    #[command(subcommand)]
     Products(products::ProductsCommand),
-    #[command(subcommand)]
-    ProductsV2(products_v2::ProductsV2Command),
     #[command(subcommand)]
     Releases(releases::ReleasesCommand),
     #[command(subcommand)]
@@ -104,11 +94,6 @@ impl CliCommands {
                     missing_arguments.push("--api-key".to_owned());
                 }
 
-                // require organization name
-                if global_options.organization_name.is_none() {
-                    missing_arguments.push("--organization-name".to_owned());
-                }
-
                 Self::print_missing_arguments(missing_arguments);
 
                 match api {
@@ -120,12 +105,9 @@ impl CliCommands {
                     ApiCommand::BinarySignatures(cmd) => cmd.run(global_options).await?,
                     ApiCommand::CaCertificates(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Cohorts(cmd) => cmd.run(global_options).await?,
-                    ApiCommand::Deployments(cmd) => cmd.run(global_options).await?,
                     ApiCommand::DeviceCertificates(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Devices(cmd) => cmd.run(global_options).await?,
-                    ApiCommand::Firmwares(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Products(cmd) => cmd.run(global_options).await?,
-                    ApiCommand::ProductsV2(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Releases(cmd) => cmd.run(global_options).await?,
                     ApiCommand::SigningKeys(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Tunnels(cmd) => cmd.run(global_options).await?,

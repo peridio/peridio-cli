@@ -2,8 +2,8 @@ use std::thread::sleep;
 use std::time::{Duration, Instant};
 
 use super::Command;
-use crate::api::list::ListArgs;
 use crate::print_json;
+use crate::utils::list::ListArgs;
 use crate::utils::{PRNType, PRNValueParser};
 use crate::ApiSnafu;
 use crate::Error;
@@ -14,7 +14,7 @@ use peridio_sdk::api::tunnels::{
     CreateTunnelParams, GetTunnelParams, ListTunnelsParams, UpdateTunnelParams,
 };
 use peridio_sdk::api::Api;
-use peridio_sdk::api::ApiOptions;
+use peridio_sdk::list_params::ListParams;
 use snafu::ResultExt;
 
 #[derive(Parser, Debug)]
@@ -74,11 +74,7 @@ impl Command<CreateCommand> {
             ttl: self.inner.ttl,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from(global_options);
 
         match api.tunnels().create(params).await.context(ApiSnafu)? {
             Some(response) => {
@@ -142,11 +138,7 @@ impl Command<GetCommand> {
             prn: self.inner.prn,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from(global_options);
 
         match api.tunnels().get(params).await.context(ApiSnafu)? {
             Some(tunnel) => print_json!(&tunnel),
@@ -166,17 +158,10 @@ pub struct ListCommand {
 impl Command<ListCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = ListTunnelsParams {
-            limit: self.inner.list_args.limit,
-            order: self.inner.list_args.order,
-            search: self.inner.list_args.search,
-            page: self.inner.list_args.page,
+            list: ListParams::from(self.inner.list_args),
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from(global_options);
 
         match api.tunnels().list(params).await.context(ApiSnafu)? {
             Some(tunnel) => print_json!(&tunnel),
@@ -225,11 +210,7 @@ impl Command<UpdateCommand> {
             ttl: self.inner.ttl,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from(global_options);
 
         match api.tunnels().update(params).await.context(ApiSnafu)? {
             Some(device) => print_json!(&device),

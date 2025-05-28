@@ -19,7 +19,6 @@ use peridio_sdk::api::binary_signatures::CreateBinarySignatureParams;
 use peridio_sdk::api::binary_signatures::CreateBinarySignatureResponse;
 use peridio_sdk::api::binary_signatures::DeleteBinarySignatureParams;
 use peridio_sdk::api::Api;
-use peridio_sdk::api::ApiOptions;
 use sha2::Digest;
 use sha2::Sha256;
 use snafu::ResultExt;
@@ -114,7 +113,7 @@ impl CreateCommand {
     ) -> Result<Option<CreateBinarySignatureResponse>, Error> {
         // user provides a signing_key_pair
         let (signing_key_prn, signature) = if let Some(signing_key_pair) = self.signing_key_pair {
-            if let Some(signing_key_pairs) = global_options.signing_key_pairs {
+            if let Some(signing_key_pairs) = global_options.signing_key_pairs.clone() {
                 if let Some(key_pair) = signing_key_pairs.get(&signing_key_pair) {
                     // first we check for a binary path is provided
                     let signature = if let Some(binary_content_path) = self.binary_content_path {
@@ -181,11 +180,7 @@ impl CreateCommand {
         let api = if let Some(api) = self.api {
             api
         } else {
-            Api::new(ApiOptions {
-                api_key: global_options.api_key.unwrap(),
-                endpoint: global_options.base_url,
-                ca_bundle_path: global_options.ca_path,
-            })
+            Api::from(global_options)
         };
 
         api.binary_signatures()
@@ -248,11 +243,7 @@ impl Command<DeleteCommand> {
             binary_signature_prn: self.inner.binary_signature_prn,
         };
 
-        let api = Api::new(ApiOptions {
-            api_key: global_options.api_key.unwrap(),
-            endpoint: global_options.base_url,
-            ca_bundle_path: global_options.ca_path,
-        });
+        let api = Api::from(global_options);
 
         match api
             .binary_signatures()

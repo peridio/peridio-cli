@@ -11,6 +11,8 @@ use std::{
 
 use clap::Parser;
 use config::Config;
+use peridio_sdk::api::ApiOptions;
+use peridio_sdk::Api;
 use snafu::Snafu;
 
 use crate::config::config_v2::{CertificateAuthoritiesV2, SigningKeyPairsV2};
@@ -88,9 +90,6 @@ pub struct GlobalOptions {
     #[arg(long, env = "PERIDIO_CA_PATH", short = 'c')]
     ca_path: Option<PathBuf>,
 
-    #[arg(long, env = "PERIDIO_ORGANIZATION_NAME", short = 'o')]
-    organization_name: Option<String>,
-
     #[arg(long, env = "PERIDIO_PROFILE", short = 'p')]
     profile: Option<String>,
 
@@ -107,6 +106,16 @@ pub struct GlobalOptions {
 
     #[clap(skip)]
     certificate_authorities: Option<CertificateAuthoritiesV2>,
+}
+
+impl From<GlobalOptions> for Api {
+    fn from(options: GlobalOptions) -> Self {
+        Api::new(ApiOptions {
+            api_key: options.api_key.unwrap(),
+            endpoint: options.base_url,
+            ca_bundle_path: options.ca_path,
+        })
+    }
 }
 
 impl Program {
@@ -146,12 +155,6 @@ impl Program {
                                     self.global_options.ca_path = Some(ca_path.into());
                                 };
                             };
-
-                            if self.global_options.organization_name.is_none() {
-                                if let Some(organization_name) = profile.organization_name {
-                                    self.global_options.organization_name = Some(organization_name);
-                                };
-                            }
                         }
                     }
 
