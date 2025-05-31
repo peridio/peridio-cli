@@ -3,6 +3,7 @@ mod artifacts;
 mod binaries;
 mod binary_parts;
 mod binary_signatures;
+mod bundle_overrides;
 mod bundles;
 mod ca_certificates;
 mod cohorts;
@@ -58,6 +59,8 @@ pub enum ApiCommand {
     #[command(subcommand)]
     Bundles(bundles::BundlesCommand),
     #[command(subcommand)]
+    BundleOverrides(bundle_overrides::BundleOverridesCommand),
+    #[command(subcommand)]
     Binaries(binaries::BinariesCommand),
     #[command(subcommand)]
     BinaryParts(binary_parts::BinaryPartsCommand),
@@ -100,6 +103,7 @@ impl CliCommands {
                     ApiCommand::Artifacts(cmd) => cmd.run(global_options).await?,
                     ApiCommand::ArtifactVersions(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Bundles(cmd) => cmd.run(global_options).await?,
+                    ApiCommand::BundleOverrides(cmd) => cmd.run(global_options).await?,
                     ApiCommand::Binaries(cmd) => cmd.run(global_options).await?,
                     ApiCommand::BinaryParts(cmd) => cmd.run(global_options).await?,
                     ApiCommand::BinarySignatures(cmd) => cmd.run(global_options).await?,
