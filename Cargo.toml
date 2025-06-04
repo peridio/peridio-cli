@@ -7,8 +7,7 @@ version = "1.1.1"
 edition = "2021"
 
 [dependencies]
-peridio-sdk = { git = "https://github.com/peridio/peridio-rust.git", branch = "jwong/rsdk-13-fix-organization-prn-requirement" }
-# peridio-sdk = { git = "https://github.com/peridio/peridio-rust.git", tag = "1.1.0" }
+peridio-sdk = { git = "https://github.com/peridio/peridio-rust.git", tag = "1.1.1" }
 serde_json = "1.0.125"
 snafu = "0.8.4"
 tokio = { version = "1.39.3", features = ["full"] }
@@ -39,6 +38,7 @@ backon = { version = "0.5.0", features = ["tokio-sleep"] }
 console = "0.15.8"
 clap-num = "1.1.1"
 rcgen = { version = "0.13.1", features = ["aws_lc_rs", "pem", "x509-parser"] }
+shellexpand = "3.1.0"
 time = { version = "0.3.36", features = ["formatting", "parsing", "macros"] }
 x509-parser = "0.16.0"
 aws-lc-rs = "1.10.0"

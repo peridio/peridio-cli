@@ -217,7 +217,7 @@ impl CreateCommand {
 
     async fn process_binary(&self, binary: &Binary, api: &Api) -> Result<Binary, Error> {
         if matches!(binary.state, BinaryState::Uploadable) {
-            let binary = self.process_binary_parts(binary, api).await.unwrap();
+            let binary = self.process_binary_parts(binary, api).await?;
 
             // do signing if available
             if self.signing_key_pair.is_some() || self.signing_key_private.is_some() {
@@ -232,7 +232,7 @@ impl CreateCommand {
                     .await?;
 
                 eprintln!("Signing binary...");
-                let binary = self.sign_binary(&binary, api).await.unwrap();
+                let binary = self.sign_binary(&binary, api).await?;
 
                 Ok(binary)
             } else {
@@ -243,8 +243,7 @@ impl CreateCommand {
             // move to hashing
             let binary = self
                 .change_binary_status(ArgBinaryState::Hashing, binary, api)
-                .await
-                .unwrap();
+                .await?;
 
             if self.signing_key_pair.is_some() || self.signing_key_private.is_some() {
                 // wait for hashing to be signable
@@ -258,7 +257,7 @@ impl CreateCommand {
                     .await?;
 
                 eprintln!("Signing binary...");
-                let binary = self.sign_binary(&binary, api).await.unwrap();
+                let binary = self.sign_binary(&binary, api).await?;
 
                 Ok(binary)
             } else {
@@ -277,7 +276,7 @@ impl CreateCommand {
                     .await?;
 
                 eprintln!("Signing binary...");
-                let binary = self.sign_binary(&binary, api).await.unwrap();
+                let binary = self.sign_binary(&binary, api).await?;
 
                 Ok(binary)
             } else {
@@ -286,7 +285,7 @@ impl CreateCommand {
         } else if matches!(binary.state, BinaryState::Signable) {
             if self.signing_key_pair.is_some() || self.signing_key_private.is_some() {
                 eprintln!("Signing binary...");
-                let binary = self.sign_binary(binary, api).await.unwrap();
+                let binary = self.sign_binary(binary, api).await?;
 
                 Ok(binary)
             } else {
@@ -300,7 +299,7 @@ impl CreateCommand {
     async fn sign_binary(&self, binary: &Binary, api: &Api) -> Result<Binary, Error> {
         let command = crate::api::binary_signatures::CreateCommand {
             binary_prn: binary.prn.clone(),
-            binary_content_path: Some(self.content_path.clone().unwrap()),
+            binary_content_path: self.content_path.clone(),
             signature: None,
             signing_key_pair: self.signing_key_pair.clone(),
             signing_key_private: self.signing_key_private.clone(),
@@ -309,12 +308,18 @@ impl CreateCommand {
             binary_content_hash: binary.hash.clone(),
         };
 
-        match command.run(self.global_options.clone().unwrap()).await? {
+        match command
+            .run(self.global_options.clone().ok_or_else(|| Error::Api {
+                source: peridio_sdk::api::Error::Unknown {
+                    error: "Global options not available".to_string(),
+                },
+            })?)
+            .await?
+        {
             Some(_) => {
                 let binary = self
                     .change_binary_status(ArgBinaryState::Signed, binary, api)
-                    .await
-                    .unwrap();
+                    .await?;
 
                 Ok(binary)
             }
@@ -328,7 +333,14 @@ impl CreateCommand {
             api: Some(api.to_owned()),
         };
 
-        match command.run(self.global_options.clone().unwrap()).await? {
+        match command
+            .run(self.global_options.clone().ok_or_else(|| Error::Api {
+                source: peridio_sdk::api::Error::Unknown {
+                    error: "Global options not available".to_string(),
+                },
+            })?)
+            .await?
+        {
             Some(GetBinaryResponse { binary }) => {
                 if matches!(binary.state, BinaryState::Signable) {
                     Ok(binary)
@@ -360,7 +372,14 @@ impl CreateCommand {
             size: None,
         };
 
-        match command.run(self.global_options.clone().unwrap()).await? {
+        match command
+            .run(self.global_options.clone().ok_or_else(|| Error::Api {
+                source: peridio_sdk::api::Error::Unknown {
+                    error: "Global options not available".to_string(),
+                },
+            })?)
+            .await?
+        {
             Some(UpdateBinaryResponse { binary }) => Ok(binary),
             None => panic!("Cannot update binary state"),
         }
@@ -369,20 +388,33 @@ impl CreateCommand {
     async fn process_binary_parts(&self, binary: &Binary, api: &Api) -> Result<Binary, Error> {
         eprintln!("Evaluating binary parts...");
         // get server parts
-        let binary_parts = self.get_binary_parts(binary, api).await.unwrap();
+        let binary_parts = self.get_binary_parts(binary, api).await?;
 
         let file_size = {
-            let file = fs::File::open(self.content_path.clone().unwrap()).context(
-                NonExistingPathSnafu {
-                    path: &self.content_path.clone().unwrap(),
+            let content_path = self.content_path.clone().ok_or_else(|| Error::Api {
+                source: peridio_sdk::api::Error::Unknown {
+                    error: "Content path is required for binary upload".to_string(),
                 },
-            )?;
+            })?;
+            let file = fs::File::open(&content_path).context(NonExistingPathSnafu {
+                path: &content_path,
+            })?;
 
-            file.metadata().unwrap().len()
+            file.metadata()
+                .map_err(|e| Error::Api {
+                    source: peridio_sdk::api::Error::Unknown {
+                        error: format!("Failed to get file metadata for '{}': {}", content_path, e),
+                    },
+                })?
+                .len()
         };
 
-        let chunks_length =
-            (file_size as f64 / self.binary_part_size.unwrap() as f64).ceil() as u64;
+        let binary_part_size = self.binary_part_size.ok_or_else(|| Error::Api {
+            source: peridio_sdk::api::Error::Unknown {
+                error: "Binary part size is required".to_string(),
+            },
+        })?;
+        let chunks_length = (file_size as f64 / binary_part_size as f64).ceil() as u64;
 
         let client = Client::new();
 
@@ -398,7 +430,7 @@ impl CreateCommand {
 
         eprintln!("Validating Upload");
         // list binary parts again in order to get the latest state
-        let binary_parts = self.get_binary_parts(binary, api).await.unwrap();
+        let binary_parts = self.get_binary_parts(binary, api).await?;
 
         // if the parts are not equal it means we missed a part
         // if a binary part state is not valid is because something is missing

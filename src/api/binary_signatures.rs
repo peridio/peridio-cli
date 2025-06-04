@@ -194,18 +194,63 @@ impl CreateCommand {
         binary_content_path: String,
         binary_content_hash: Option<String>,
     ) -> Result<String, Error> {
-        let signing_key_private =
-            fs::read_to_string(&signing_key_private_path).context(NonExistingPathSnafu {
-                path: &signing_key_private_path,
+        // Expand environment variables in the path
+        let expanded_path =
+            shellexpand::full(&signing_key_private_path).map_err(|e| Error::Api {
+                source: peridio_sdk::api::Error::Unknown {
+                    error: format!(
+                        "Failed to expand path '{}': {}",
+                        signing_key_private_path, e
+                    ),
+                },
             })?;
-        let signing_key: SigningKey = SigningKey::from_pkcs8_pem(&signing_key_private).unwrap();
+
+        let signing_key_private =
+            fs::read_to_string(expanded_path.as_ref()).context(NonExistingPathSnafu {
+                path: expanded_path.as_ref(),
+            })?;
+
+        let signing_key: SigningKey =
+            SigningKey::from_pkcs8_pem(&signing_key_private).map_err(|e| Error::Api {
+                source: peridio_sdk::api::Error::Unknown {
+                    error: format!(
+                        "Failed to parse private key from '{}': {}",
+                        expanded_path, e
+                    ),
+                },
+            })?;
 
         let hash = if let Some(hash) = binary_content_hash {
             hash
         } else {
-            let mut binary_content = fs::File::open(binary_content_path).unwrap();
+            let expanded_binary_path =
+                shellexpand::full(&binary_content_path).map_err(|e| Error::Api {
+                    source: peridio_sdk::api::Error::Unknown {
+                        error: format!(
+                            "Failed to expand binary path '{}': {}",
+                            binary_content_path, e
+                        ),
+                    },
+                })?;
+
+            let mut binary_content =
+                fs::File::open(expanded_binary_path.as_ref()).map_err(|e| Error::Api {
+                    source: peridio_sdk::api::Error::Unknown {
+                        error: format!(
+                            "Failed to open binary file '{}': {}",
+                            expanded_binary_path, e
+                        ),
+                    },
+                })?;
             let mut hasher = Sha256::new();
-            let _ = io::copy(&mut binary_content, &mut hasher).unwrap();
+            io::copy(&mut binary_content, &mut hasher).map_err(|e| Error::Api {
+                source: peridio_sdk::api::Error::Unknown {
+                    error: format!(
+                        "Failed to read binary file '{}': {}",
+                        expanded_binary_path, e
+                    ),
+                },
+            })?;
             let hash = hasher.finalize();
             format!("{hash:x}")
         };
