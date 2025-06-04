@@ -3,11 +3,12 @@ name = "peridio-cli"
 description = "Peridio CLI"
 homepage = "https://peridio.com"
 repository = "https://github.com/peridio/peridio-cli"
-version = "1.1.0"
+version = "1.1.1"
 edition = "2021"
 
 [dependencies]
-peridio-sdk = { git = "https://github.com/peridio/peridio-rust.git", tag = "1.1.0" }
+peridio-sdk = { git = "https://github.com/peridio/peridio-rust.git", branch = "jwong/rsdk-13-fix-organization-prn-requirement" }
+# peridio-sdk = { git = "https://github.com/peridio/peridio-rust.git", tag = "1.1.0" }
 serde_json = "1.0.125"
 snafu = "0.8.4"
 tokio = { version = "1.39.3", features = ["full"] }

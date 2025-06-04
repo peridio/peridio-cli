@@ -60,19 +60,12 @@ pub struct CreateCommand {
     /// The URL that the webhook will send a POST request to.
     #[arg(long)]
     url: String,
-    /// The PRN of the organization you wish to create the resource within.
-    #[arg(
-        long,
-        value_parser = PRNValueParser::new(PRNType::Organization)
-    )]
-    organization_prn: String,
 }
 
 impl Command<CreateCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         let params = CreateWebhookParams {
             description: self.inner.description,
-            organization_prn: self.inner.organization_prn,
             enabled_events: self.inner.enabled_events,
             url: self.inner.url,
         };
