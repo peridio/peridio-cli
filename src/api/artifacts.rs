@@ -62,13 +62,6 @@ pub struct CreateCommand {
     /// The resource's name, meant to be displayable to users.
     #[arg(long)]
     name: String,
-
-    /// The PRN of the organization you wish to create the resource within.
-    #[arg(
-        long,
-        value_parser = PRNValueParser::new(PRNType::Organization)
-    )]
-    organization_prn: String,
 }
 
 impl Command<CreateCommand> {
@@ -88,7 +81,6 @@ impl Command<CreateCommand> {
             description: self.inner.description,
             id: self.inner.id,
             name: self.inner.name,
-            organization_prn: self.inner.organization_prn,
         };
 
         let api = Api::from(global_options);

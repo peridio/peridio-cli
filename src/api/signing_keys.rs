@@ -73,13 +73,6 @@ pub struct CreateCommand {
     #[arg(long)]
     name: String,
 
-    /// The PRN of the organization you wish to create the resource within.
-    #[arg(
-        long,
-        value_parser = PRNValueParser::new(PRNType::Organization)
-    )]
-    organization_prn: String,
-
     /// The path to the public key raw file. --key cannot be used with --algorithm, --out, --path, or --value.
     #[arg(
         long,
@@ -141,7 +134,6 @@ pub struct CreateCommand {
     #[arg(
         long,
         requires = "algorithm",
-        requires = "config",
         requires = "out",
         conflicts_with = "key",
         conflicts_with = "value",
@@ -217,7 +209,6 @@ impl Command<CreateCommand> {
         let params = CreateSigningKeyParams {
             value,
             name: self.inner.name,
-            organization_prn: self.inner.organization_prn,
         };
 
         let api = Api::from(global_options.clone());

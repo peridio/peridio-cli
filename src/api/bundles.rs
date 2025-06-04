@@ -49,13 +49,6 @@ pub struct CreateCommand {
     #[arg(long)]
     id: Option<String>,
 
-    /// The PRN of the organization to create the bundle for.
-    #[arg(
-        long,
-        value_parser = PRNValueParser::new(PRNType::Organization)
-    )]
-    organization_prn: String,
-
     /// The name of the bundle.
     #[arg(long)]
     name: Option<String>,
@@ -66,7 +59,6 @@ impl Command<CreateCommand> {
         let params = CreateBundleParams {
             artifact_version_prns: self.inner.artifact_version_prns,
             id: self.inner.id,
-            organization_prn: self.inner.organization_prn,
             name: self.inner.name,
         };
 

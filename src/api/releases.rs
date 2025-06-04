@@ -71,12 +71,6 @@ pub struct CreateCommand {
         value_parser = PRNValueParser::new(PRNType::Release)
     )]
     next_release_prn: Option<String>,
-    /// The PRN of the organization you wish to create the resource within.
-    #[arg(
-        long,
-        value_parser = PRNValueParser::new(PRNType::Organization)
-    )]
-    organization_prn: String,
 
     /// Limits by tags the devices that are allowed to update to this release.
     /// When phase_mode is tags, this field only allows devices to update to this release if they have at least one of these tags.
@@ -156,7 +150,6 @@ impl Command<CreateCommand> {
             description: self.inner.description,
             disabled: self.inner.disabled,
             name: self.inner.name,
-            organization_prn: self.inner.organization_prn,
             phase_mode: Some(phase_mode),
             phase_tags,
             phase_value,

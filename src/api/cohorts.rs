@@ -44,13 +44,6 @@ pub struct CreateCommand {
     #[arg(long)]
     name: String,
 
-    /// The PRN of the organization you wish to create the resource within.
-    #[arg(
-        long,
-        value_parser = PRNValueParser::new(PRNType::Organization)
-    )]
-    organization_prn: String,
-
     /// The PRN of the product you wish to create the resource within.
     #[arg(
         long,
@@ -64,7 +57,6 @@ impl Command<CreateCommand> {
         let params = CreateCohortParams {
             description: self.inner.description,
             name: self.inner.name,
-            organization_prn: self.inner.organization_prn,
             product_prn: self.inner.product_prn,
         };
 

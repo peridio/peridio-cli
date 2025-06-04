@@ -1523,7 +1523,7 @@ checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
 
 [[package]]
 name = "peridio-cli"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "assert_cmd",
  "aws-lc-rs",
@@ -1548,6 +1548,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "shellexpand",
  "snafu",
  "static_init",
  "tar",
@@ -1562,8 +1563,8 @@ dependencies = [
 
 [[package]]
 name = "peridio-sdk"
-version = "1.1.0"
-source = "git+https://github.com/peridio/peridio-rust.git?tag=1.1.0#fada3299990ddf3ac776a400882da81bfa912508"
+version = "1.1.1"
+source = "git+https://github.com/peridio/peridio-rust.git?tag=1.1.1#a5499a82008466985040fe6a393defd3e8488f31"
 dependencies = [
  "chrono",
  "reqwest",
@@ -2133,6 +2134,15 @@ name = "shell-words"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "24188a676b6ae68c3b2cb3a01be17fbf7240ce009799bb56d5b1409051e78fde"
+
+[[package]]
+name = "shellexpand"
+version = "3.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b1fdf65dd6331831494dd616b30351c38e96e45921a27745cf98490458b90bb"
+dependencies = [
+ "dirs",
+]
 
 [[package]]
 name = "shlex"
