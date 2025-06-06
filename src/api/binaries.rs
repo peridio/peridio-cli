@@ -18,8 +18,10 @@ use futures_util::StreamExt;
 use indicatif::ProgressBar;
 use indicatif::ProgressState;
 use indicatif::ProgressStyle;
+use peridio_sdk::api::artifact_versions::ArtifactVersion;
 use peridio_sdk::api::artifact_versions::GetArtifactVersionParams;
 use peridio_sdk::api::artifact_versions::GetArtifactVersionResponse;
+use peridio_sdk::api::artifacts::Artifact;
 use peridio_sdk::api::artifacts::GetArtifactParams;
 use peridio_sdk::api::artifacts::GetArtifactResponse;
 use peridio_sdk::api::binaries::Binary;
@@ -35,6 +37,12 @@ use peridio_sdk::api::binaries::UpdateBinaryParams;
 use peridio_sdk::api::binaries::UpdateBinaryResponse;
 use peridio_sdk::api::binary_parts::BinaryPartState;
 use peridio_sdk::api::binary_parts::ListBinaryPart;
+use peridio_sdk::api::bundle_overrides::AddDeviceParams;
+use peridio_sdk::api::bundle_overrides::BundleOverride;
+use peridio_sdk::api::bundle_overrides::CreateBundleOverrideParams;
+use peridio_sdk::api::bundles::Bundle;
+use peridio_sdk::api::releases::CreateReleaseParams;
+use peridio_sdk::api::releases::Release;
 use peridio_sdk::api::Api;
 use peridio_sdk::list_params::ListParams;
 use reqwest::Body;
@@ -48,6 +56,7 @@ use std::sync::Arc;
 use std::thread::available_parallelism;
 use std::time::Duration;
 use std::{fs, io};
+use time::OffsetDateTime;
 
 #[derive(Parser, Debug)]
 pub enum BinariesCommand {
@@ -178,6 +187,30 @@ pub struct CreateCommand {
     )]
     skip_upload: bool,
 
+    /// The PRN of the bundle override to associate with this binary.
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::BundleOverride),
+        conflicts_with_all = ["device_prn", "cohort_prn"]
+    )]
+    bundle_override_prn: Option<String>,
+
+    /// The PRN of the device to associate with this binary.
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Device),
+        conflicts_with_all = ["bundle_override_prn", "cohort_prn"]
+    )]
+    device_prn: Option<String>,
+
+    /// The PRN of the cohort to associate with this binary.
+    #[arg(
+        long,
+        value_parser = PRNValueParser::new(PRNType::Cohort),
+        conflicts_with_all = ["bundle_override_prn", "device_prn"]
+    )]
+    cohort_prn: Option<String>,
+
     #[clap(skip)]
     global_options: Option<GlobalOptions>,
 }
@@ -207,12 +240,355 @@ impl CreateCommand {
 
                 let binary = self.process_binary(&binary, &api).await?;
 
+                if let Some(bundle_override_prn) = &self.bundle_override_prn {
+                    self.handle_create_with_bundle_override(bundle_override_prn, &binary, &api)
+                        .await?;
+                }
+
+                if let Some(device_prn) = &self.device_prn {
+                    self.handle_create_with_device(device_prn, &binary, &api)
+                        .await?;
+                }
+
+                if let Some(cohort_prn) = &self.cohort_prn {
+                    self.handle_create_with_cohort(cohort_prn, &binary, &api)
+                        .await?;
+                }
+
                 Some(CreateBinaryResponse { binary })
             }
             None => None,
         };
 
         Ok(binary)
+    }
+
+    async fn handle_create_with_bundle_override(
+        &self,
+        bundle_override_prn: &str,
+        binary: &Binary,
+        api: &Api,
+    ) -> Result<(Bundle, BundleOverride), Error> {
+        eprintln!(
+            "Preparing to assign binary to bundle override {}",
+            bundle_override_prn
+        );
+
+        let bundle = self.create_bundle_for_binary(binary, api).await?;
+
+        let bundle_override = self
+            .update_bundle_override_to_bundle(bundle_override_prn, &bundle.prn, api)
+            .await?;
+
+        Ok((bundle, bundle_override))
+    }
+
+    async fn handle_create_with_device(
+        &self,
+        device_prn: &str,
+        binary: &Binary,
+        api: &Api,
+    ) -> Result<(Bundle, BundleOverride), Error> {
+        eprintln!("Creating binary association with device {}", device_prn);
+
+        let bundle = self.create_bundle_for_binary(binary, api).await?;
+        let bundle_override = self.create_bundle_override_for_bundle(&bundle, api).await?;
+
+        self.add_device_to_bundle_override(device_prn, &bundle_override, api)
+            .await?;
+
+        Ok((bundle, bundle_override))
+    }
+
+    async fn handle_create_with_cohort(
+        &self,
+        cohort_prn: &str,
+        binary: &Binary,
+        api: &Api,
+    ) -> Result<(Bundle, Release), Error> {
+        eprintln!(
+            "Creating binary association with new release in cohort {}",
+            cohort_prn
+        );
+
+        let bundle = self.create_bundle_for_binary(binary, api).await?;
+
+        let release = self
+            .create_release_for_bundle(&bundle, cohort_prn, api)
+            .await?;
+
+        Ok((bundle, release))
+    }
+
+    async fn add_device_to_bundle_override(
+        &self,
+        device_prn: &str,
+        bundle_override: &BundleOverride,
+        api: &Api,
+    ) -> Result<(), Error> {
+        eprintln!(
+            "Adding device {} to bundle override {}",
+            device_prn, bundle_override.prn
+        );
+
+        let add_device_params = AddDeviceParams {
+            prn: bundle_override.prn.clone(),
+            device_prn: device_prn.to_string(),
+        };
+
+        match api
+            .bundle_overrides()
+            .add_device(add_device_params)
+            .await
+            .context(ApiSnafu)?
+        {
+            Some(_) => {
+                eprintln!(
+                    "Successfully added device {} to bundle override {}",
+                    device_prn, bundle_override.prn
+                );
+                Ok(())
+            }
+            None => Err(Error::Generic {
+                error: format!(
+                    "Failed to add device {} to bundle override {}",
+                    device_prn, bundle_override.prn
+                ),
+            }),
+        }
+    }
+
+    async fn create_bundle_for_binary(&self, binary: &Binary, api: &Api) -> Result<Bundle, Error> {
+        let (artifact_version, artifact) = self
+            .get_artifact_and_version(&binary.artifact_version_prn, api)
+            .await?;
+
+        let bundle = self
+            .create_bundle(&artifact, &artifact_version, binary, api)
+            .await?;
+
+        Ok(bundle)
+    }
+
+    async fn get_artifact_and_version(
+        &self,
+        artifact_version_prn: &str,
+        api: &Api,
+    ) -> Result<(ArtifactVersion, Artifact), Error> {
+        let artifact_version_params = GetArtifactVersionParams {
+            prn: artifact_version_prn.to_string(),
+        };
+
+        let artifact_version = match api
+            .artifact_versions()
+            .get(artifact_version_params)
+            .await
+            .context(ApiSnafu)?
+        {
+            Some(GetArtifactVersionResponse { artifact_version }) => artifact_version,
+            None => {
+                return Err(Error::Generic {
+                    error: format!("Failed to find artifact version: {}", artifact_version_prn),
+                });
+            }
+        };
+
+        let artifact_params = GetArtifactParams {
+            prn: artifact_version.artifact_prn.clone(),
+        };
+
+        let artifact = match api
+            .artifacts()
+            .get(artifact_params)
+            .await
+            .context(ApiSnafu)?
+        {
+            Some(GetArtifactResponse { artifact }) => artifact,
+            None => {
+                return Err(Error::Generic {
+                    error: format!("Failed to find artifact: {}", artifact_version.artifact_prn),
+                });
+            }
+        };
+
+        Ok((artifact_version, artifact))
+    }
+
+    async fn create_bundle(
+        &self,
+        artifact: &Artifact,
+        artifact_version: &ArtifactVersion,
+        binary: &Binary,
+        api: &Api,
+    ) -> Result<Bundle, Error> {
+        // Create formatted name string
+        let name = format!(
+            "{}@{}/{}",
+            artifact.name, artifact_version.version, binary.target
+        );
+
+        eprintln!("Creating bundle for binary...");
+
+        // Create bundle with the formatted name
+        let bundle_params = peridio_sdk::api::bundles::CreateBundleParams {
+            artifact_version_prns: vec![artifact_version.prn.clone()],
+            id: None,
+            name: Some(name),
+        };
+
+        match api
+            .bundles()
+            .create(bundle_params)
+            .await
+            .context(ApiSnafu)?
+        {
+            Some(bundle_response) => {
+                eprintln!("Created bundle {}", bundle_response.bundle.prn);
+                Ok(bundle_response.bundle)
+            }
+            None => Err(Error::Generic {
+                error: "Failed to create bundle".to_string(),
+            }),
+        }
+    }
+
+    async fn update_bundle_override_to_bundle(
+        &self,
+        bundle_override_prn: &str,
+        bundle_prn: &str,
+        api: &Api,
+    ) -> Result<BundleOverride, Error> {
+        eprintln!(
+            "Updating bundle override {} to bundle {}",
+            bundle_override_prn, bundle_prn
+        );
+
+        // Update the bundle override with the new bundle PRN
+        let update_params = peridio_sdk::api::bundle_overrides::UpdateBundleOverrideParams {
+            prn: bundle_override_prn.to_string(),
+            bundle_prn: Some(bundle_prn.to_string()),
+            name: None,
+            description: None,
+            ends_at: None,
+            starts_at: None,
+        };
+
+        match api
+            .bundle_overrides()
+            .update(update_params)
+            .await
+            .context(ApiSnafu)?
+        {
+            Some(response) => {
+                eprintln!("Updated bundle override {}", bundle_override_prn);
+                Ok(response.bundle_override)
+            }
+            None => Err(Error::Generic {
+                error: "Failed to update bundle override".to_string(),
+            }),
+        }
+    }
+
+    async fn create_bundle_override_for_bundle(
+        &self,
+        bundle: &Bundle,
+        api: &Api,
+    ) -> Result<BundleOverride, Error> {
+        eprintln!("Creating bundle override for bundle {}", bundle.prn);
+
+        // Use the bundle name if available, otherwise use a default name
+        let name = bundle
+            .name
+            .clone()
+            .unwrap_or_else(|| format!("Bundle Override for {}", bundle.prn));
+
+        // Use current time as start time (ISO 8601 format)
+        let starts_at = OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .map_err(|e| Error::Generic {
+                error: format!("Failed to format current time: {}", e),
+            })?;
+
+        let create_params = CreateBundleOverrideParams {
+            name,
+            bundle_prn: bundle.prn.clone(),
+            starts_at,
+            description: Some(format!(
+                "Auto-created bundle override for bundle {}",
+                bundle.prn
+            )),
+            ends_at: None, // No end time, active indefinitely
+        };
+
+        match api
+            .bundle_overrides()
+            .create(create_params)
+            .await
+            .context(ApiSnafu)?
+        {
+            Some(response) => {
+                eprintln!("Created bundle override {}", response.bundle_override.prn);
+                Ok(response.bundle_override)
+            }
+            None => Err(Error::Generic {
+                error: "Failed to create bundle override".to_string(),
+            }),
+        }
+    }
+
+    async fn create_release_for_bundle(
+        &self,
+        bundle: &Bundle,
+        cohort_prn: &str,
+        api: &Api,
+    ) -> Result<Release, Error> {
+        eprintln!(
+            "Creating release for bundle {} in cohort {}",
+            bundle.prn, cohort_prn
+        );
+
+        let name = bundle
+            .name
+            .clone()
+            .unwrap_or_else(|| format!("Release for {}", bundle.prn));
+
+        let schedule_date = OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .map_err(|e| Error::Generic {
+                error: format!("Failed to format current time: {}", e),
+            })?;
+
+        let create_params = CreateReleaseParams {
+            bundle_prn: bundle.prn.clone(),
+            cohort_prn: cohort_prn.to_string(),
+            name,
+            schedule_date,
+            phase_value: Some(1.0),
+            required: false,
+            description: None,
+            disabled: None,
+            next_release_prn: None,
+            phase_mode: None,
+            phase_tags: None,
+            previous_release_prn: None,
+            version: None,
+            version_requirement: None,
+        };
+
+        match api
+            .releases()
+            .create(create_params)
+            .await
+            .context(ApiSnafu)?
+        {
+            Some(response) => {
+                eprintln!("Created release {}", response.release.prn);
+                Ok(response.release)
+            }
+            None => Err(Error::Generic {
+                error: "Failed to create release".to_string(),
+            }),
+        }
     }
 
     async fn process_binary(&self, binary: &Binary, api: &Api) -> Result<Binary, Error> {
