@@ -427,7 +427,7 @@ impl CreateCommand {
             Some(GetArtifactVersionResponse { artifact_version }) => artifact_version,
             None => {
                 return Err(Error::Generic {
-                    error: format!("Failed to get artifact version: {}", artifact_version_prn),
+                    error: format!("Failed to get artifact version: {artifact_version_prn}"),
                 });
             }
         };
@@ -513,10 +513,7 @@ impl CreateCommand {
             .context(ApiSnafu)?
         {
             Some(response) => {
-                eprintln!(
-                    "Updated bundle override {} to bundle {}",
-                    bundle_override_prn, bundle_prn
-                );
+                eprintln!("Updated bundle override {bundle_override_prn} to bundle {bundle_prn}");
                 Ok(response.bundle_override)
             }
             None => Err(Error::Generic {
@@ -542,7 +539,7 @@ impl CreateCommand {
         let starts_at = OffsetDateTime::now_utc()
             .format(&time::format_description::well_known::Rfc3339)
             .map_err(|e| Error::Generic {
-                error: format!("Failed to format current time: {}", e),
+                error: format!("Failed to format current time: {e}"),
             })?;
 
         let create_params = CreateBundleOverrideParams {
@@ -591,7 +588,7 @@ impl CreateCommand {
         let schedule_date = OffsetDateTime::now_utc()
             .format(&time::format_description::well_known::Rfc3339)
             .map_err(|e| Error::Generic {
-                error: format!("Failed to format current time: {}", e),
+                error: format!("Failed to format current time: {e}"),
             })?;
 
         let create_params = CreateReleaseParams {
@@ -815,7 +812,7 @@ impl CreateCommand {
             file.metadata()
                 .map_err(|e| Error::Api {
                     source: peridio_sdk::api::Error::Unknown {
-                        error: format!("Failed to get file metadata for '{}': {}", content_path, e),
+                        error: format!("Failed to get file metadata for '{content_path}': {e}"),
                     },
                 })?
                 .len()

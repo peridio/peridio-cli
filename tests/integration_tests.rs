@@ -101,36 +101,36 @@ fn with_users_with_me_shows_email_and_username() {
     }
 
     let user_value: Value = serde_json::from_str(stdout)
-        .unwrap_or_else(|error| panic!("{} in \"{}\"\nSTDERR: {}", error, stdout, stderr));
+        .unwrap_or_else(|error| panic!("{error} in \"{stdout}\"\nSTDERR: {stderr}"));
     let Value::Object(user_map) = user_value else {
-        panic!("{} is not a JSON object", user_value);
+        panic!("{user_value} is not a JSON object");
     };
     let Some(data_value) = user_map.get("data") else {
-        panic!("{:?} does not have data", user_map);
+        panic!("{user_map:?} does not have data");
     };
     let Value::Object(data_map) = data_value else {
-        panic!("{:?} is not an object", data_value);
+        panic!("{data_value:?} is not an object");
     };
 
     let Some(email_value) = data_map.get("email") else {
-        panic!("data object ({:?}) does not have email", data_map)
+        panic!("data object ({data_map:?}) does not have email")
     };
     let Value::String(email_string) = email_value else {
-        panic!("email ({:?}) is not a string", email_value);
+        panic!("email ({email_value:?}) is not a string");
     };
     assert_eq!(email_string, &user.email);
 
     let Some(username_value) = data_map.get("username") else {
-        panic!("data object ({:?}) does not have username", data_map);
+        panic!("data object ({data_map:?}) does not have username");
     };
     let Value::String(username_string) = username_value else {
-        panic!("username ({:?}) is not a string", username_value);
+        panic!("username ({username_value:?}) is not a string");
     };
     assert_eq!(username_string, &user.username);
 }
 
 fn base_url() -> String {
-    format!("https://{}:{}", HOST, PORT)
+    format!("https://{HOST}:{PORT}")
 }
 
 fn base_address() -> SocketAddr {
@@ -210,7 +210,7 @@ impl APIKey {
                     String::from_utf8(std::fs::read(api_key_temp_path).unwrap()).unwrap()
                 }
             }
-            Err(error) => panic!("{:?}", error),
+            Err(error) => panic!("{error:?}"),
         }
     }
 }
@@ -240,7 +240,7 @@ impl Organization {
                     );
                 }
             }
-            Err(error) => panic!("{:?}", error),
+            Err(error) => panic!("{error:?}"),
         }
 
         Self { prn_temp_path }
@@ -256,7 +256,7 @@ struct User {
 impl User {
     fn create(email_domain: &str) -> Self {
         let username = random_name();
-        let email = format!("{}@{}", username, email_domain);
+        let email = format!("{username}@{email_domain}");
         let password = "peridio-cli";
         let prn_temp_path = NamedTempFile::new().unwrap().into_temp_path();
 
@@ -277,7 +277,7 @@ impl User {
                     );
                 }
             }
-            Err(error) => panic!("{:?}", error),
+            Err(error) => panic!("{error:?}"),
         }
 
         Self {
@@ -317,7 +317,7 @@ fn mix_command() -> std::process::Command {
 }
 
 fn require_env_var(name: &str) -> String {
-    env::var(name).unwrap_or_else(|_| panic!("{} is not set", name))
+    env::var(name).unwrap_or_else(|_| panic!("{name} is not set"))
 }
 
 const HOST: &str = "api.test.peridio.com";
@@ -349,7 +349,7 @@ impl PeridioCloudAPI {
             }
             Err(error) => match error.kind() {
                 ErrorKind::NotFound => panic!("mix not found"),
-                _ => panic!("{:?}", error),
+                _ => panic!("{error:?}"),
             },
         }
     }
@@ -362,7 +362,7 @@ impl PeridioCloudAPI {
                 Ok(_) => break,
                 Err(error) => match error.kind() {
                     ErrorKind::ConnectionRefused => sleep(Duration::from_secs(5)),
-                    _ => panic!("{:?}", error),
+                    _ => panic!("{error:?}"),
                 },
             }
         }
@@ -386,7 +386,7 @@ impl Drop for PeridioCloudAPI {
     fn drop(&mut self) {
         if let Some(mut child) = self.child.take() {
             if let Err(error) = child.kill() {
-                eprintln!("Could not kill child process: {}", error)
+                eprintln!("Could not kill child process: {error}")
             }
         }
     }
@@ -413,8 +413,7 @@ fn config_init_creates_profile() {
         .assert()
         .success()
         .stderr(predicates::str::contains(format!(
-            "Profile '{}' configured successfully",
-            profile_name
+            "Profile '{profile_name}' configured successfully"
         )));
 
     // Verify config.json file
