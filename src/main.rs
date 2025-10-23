@@ -90,6 +90,9 @@ pub struct GlobalOptions {
     #[arg(long, env = "PERIDIO_CA_PATH", short = 'c')]
     ca_path: Option<PathBuf>,
 
+    #[arg(long, env = "PERIDIO_API_VERSION", short = 'v')]
+    api_version: Option<u8>,
+
     #[arg(long, env = "PERIDIO_PROFILE", short = 'p')]
     profile: Option<String>,
 
@@ -114,6 +117,7 @@ impl From<GlobalOptions> for Api {
             api_key: options.api_key.unwrap(),
             endpoint: options.base_url,
             ca_bundle_path: options.ca_path,
+            api_version: options.api_version.unwrap_or(2),
         })
     }
 }
@@ -153,6 +157,12 @@ impl Program {
                             if self.global_options.ca_path.is_none() {
                                 if let Some(ca_path) = profile.ca_path {
                                     self.global_options.ca_path = Some(ca_path.into());
+                                };
+                            };
+
+                            if self.global_options.api_version.is_none() {
+                                if let Some(api_version) = profile.api_version {
+                                    self.global_options.api_version = Some(api_version);
                                 };
                             };
                         }

@@ -1496,7 +1496,7 @@ checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
 
 [[package]]
 name = "peridio-cli"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "assert_cmd",
  "aws-lc-rs",
@@ -1536,8 +1536,8 @@ dependencies = [
 
 [[package]]
 name = "peridio-sdk"
-version = "1.1.1"
-source = "git+https://github.com/peridio/peridio-rust.git?tag=1.1.1#a5499a82008466985040fe6a393defd3e8488f31"
+version = "1.2.0"
+source = "git+https://github.com/peridio/peridio-rust.git?branch=jwong-eng-295#b5d9f79ec0f4139cae87734d3001da45d8f0c4fe"
 dependencies = [
  "chrono",
  "reqwest",
