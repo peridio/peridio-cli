@@ -8,11 +8,57 @@ use crate::Error;
 use crate::GlobalOptions;
 use clap::Parser;
 use peridio_sdk::api::bundles::{
-    CreateBundleParams, DeleteBundleParams, GetBundleParams, ListBundlesParams, UpdateBundleParams,
+    Bundle, CreateBundleBinary, CreateBundleParams, CreateBundleParamsV1, CreateBundleParamsV2,
+    DeleteBundleParams, GetBundleParams, ListBundlesParams, UpdateBundleParams,
 };
 use peridio_sdk::api::Api;
 use peridio_sdk::list_params::ListParams;
 use snafu::ResultExt;
+
+// Trait to add helper methods to Bundle enum
+trait BundleExt {
+    fn print_json(&self) -> Result<(), Error>;
+}
+
+impl BundleExt for Bundle {
+    fn print_json(&self) -> Result<(), Error> {
+        match self {
+            Bundle::V1(bundle_v1) => print_json!(&bundle_v1),
+            Bundle::V2(bundle_v2) => print_json!(&bundle_v2),
+        }
+        Ok(())
+    }
+}
+
+// Helper function to create version-specific CreateBundleParams
+fn create_bundle_params(
+    api_version: u8,
+    artifact_version_prns: Vec<String>,
+    id: Option<String>,
+    name: Option<String>,
+) -> Result<CreateBundleParams, Error> {
+    match api_version {
+        1 => Ok(CreateBundleParams::V1(CreateBundleParamsV1 {
+            artifact_version_prns,
+            id,
+            name,
+        })),
+        2 => Ok(CreateBundleParams::V2(CreateBundleParamsV2 {
+            binaries: artifact_version_prns
+                .into_iter()
+                .map(|prn| CreateBundleBinary {
+                    prn,
+                    custom_metadata: None,
+                })
+                .collect(),
+            id,
+            name,
+        })),
+        _ => Err(Error::Generic {
+            error: format!("Unsupported API version: {}", api_version),
+        }),
+    }
+}
 
 #[derive(Parser, Debug)]
 pub enum BundlesCommand {
@@ -56,16 +102,18 @@ pub struct CreateCommand {
 
 impl Command<CreateCommand> {
     async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
-        let params = CreateBundleParams {
-            artifact_version_prns: self.inner.artifact_version_prns,
-            id: self.inner.id,
-            name: self.inner.name,
-        };
-
+        let api_version = global_options.api_version.unwrap_or(2);
         let api = Api::from(global_options);
 
+        let params = create_bundle_params(
+            api_version,
+            self.inner.artifact_version_prns,
+            self.inner.id,
+            self.inner.name,
+        )?;
+
         match api.bundles().create(params).await.context(ApiSnafu)? {
-            Some(bundle) => print_json!(&bundle),
+            Some(response) => response.bundle.print_json()?,
             None => panic!(),
         }
 
@@ -112,7 +160,7 @@ impl Command<ListCommand> {
         let api = Api::from(global_options);
 
         match api.bundles().list(params).await.context(ApiSnafu)? {
-            Some(bundle) => print_json!(&bundle),
+            Some(bundles_response) => print_json!(&bundles_response),
             None => panic!(),
         }
 
@@ -139,7 +187,7 @@ impl Command<GetCommand> {
         let api = Api::from(global_options);
 
         match api.bundles().get(params).await.context(ApiSnafu)? {
-            Some(bundle) => print_json!(&bundle),
+            Some(response) => response.bundle.print_json()?,
             None => panic!(),
         }
 
@@ -171,7 +219,7 @@ impl Command<UpdateCommand> {
         let api = Api::from(global_options);
 
         match api.bundles().update(params).await.context(ApiSnafu)? {
-            Some(response) => print_json!(&response),
+            Some(response) => response.bundle.print_json()?,
             None => panic!(),
         }
 

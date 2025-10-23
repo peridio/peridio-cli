@@ -40,7 +40,62 @@ use peridio_sdk::api::binary_parts::ListBinaryPart;
 use peridio_sdk::api::bundle_overrides::AddDeviceParams;
 use peridio_sdk::api::bundle_overrides::BundleOverride;
 use peridio_sdk::api::bundle_overrides::CreateBundleOverrideParams;
-use peridio_sdk::api::bundles::Bundle;
+use peridio_sdk::api::bundles::{
+    Bundle, CreateBundleBinary, CreateBundleParams, CreateBundleParamsV1, CreateBundleParamsV2,
+};
+
+// Trait to add helper methods to Bundle enum
+trait BundleExt {
+    fn prn(&self) -> &str;
+    fn name(&self) -> &Option<String>;
+}
+
+impl BundleExt for Bundle {
+    fn prn(&self) -> &str {
+        match self {
+            Bundle::V1(bundle_v1) => &bundle_v1.prn,
+            Bundle::V2(bundle_v2) => &bundle_v2.prn,
+        }
+    }
+
+    fn name(&self) -> &Option<String> {
+        match self {
+            Bundle::V1(bundle_v1) => &bundle_v1.name,
+            Bundle::V2(bundle_v2) => &bundle_v2.name,
+        }
+    }
+}
+
+// Helper function to create version-specific CreateBundleParams
+fn create_bundle_params(
+    api_version: u8,
+    artifact_version_prns: Vec<String>,
+    id: Option<String>,
+    name: Option<String>,
+) -> Result<CreateBundleParams, crate::Error> {
+    use crate::Error;
+    match api_version {
+        1 => Ok(CreateBundleParams::V1(CreateBundleParamsV1 {
+            artifact_version_prns,
+            id,
+            name,
+        })),
+        2 => Ok(CreateBundleParams::V2(CreateBundleParamsV2 {
+            binaries: artifact_version_prns
+                .into_iter()
+                .map(|prn| CreateBundleBinary {
+                    prn,
+                    custom_metadata: None,
+                })
+                .collect(),
+            id,
+            name,
+        })),
+        _ => Err(Error::Generic {
+            error: format!("Unsupported API version: {}", api_version),
+        }),
+    }
+}
 use peridio_sdk::api::releases::CreateReleaseParams;
 use peridio_sdk::api::releases::Release;
 use peridio_sdk::api::Api;
@@ -276,7 +331,14 @@ impl CreateCommand {
                     || self.device_prn.is_some()
                     || self.cohort_prn.is_some()
                 {
-                    Some(self.create_bundle_for_binary(&binary, &api).await?)
+                    Some(
+                        self.create_bundle_for_binary(
+                            &binary,
+                            &api,
+                            global_options.api_version.unwrap_or(2),
+                        )
+                        .await?,
+                    )
                 } else {
                     None
                 };
@@ -329,7 +391,7 @@ impl CreateCommand {
         api: &Api,
     ) -> Result<BundleOverride, Error> {
         let bundle_override = self
-            .update_bundle_override_to_bundle(bundle_override_prn, &bundle.prn, api)
+            .update_bundle_override_to_bundle(bundle_override_prn, bundle.prn(), api)
             .await?;
 
         Ok(bundle_override)
@@ -397,13 +459,18 @@ impl CreateCommand {
         }
     }
 
-    async fn create_bundle_for_binary(&self, binary: &Binary, api: &Api) -> Result<Bundle, Error> {
+    async fn create_bundle_for_binary(
+        &self,
+        binary: &Binary,
+        api: &Api,
+        api_version: u8,
+    ) -> Result<Bundle, Error> {
         let (artifact_version, artifact) = self
             .get_artifact_and_version(&binary.artifact_version_prn, api)
             .await?;
 
         let bundle = self
-            .create_bundle(&artifact, &artifact_version, binary, api)
+            .create_bundle(&artifact, &artifact_version, binary, api, api_version)
             .await?;
 
         Ok(bundle)
@@ -459,6 +526,7 @@ impl CreateCommand {
         artifact_version: &ArtifactVersion,
         binary: &Binary,
         api: &Api,
+        api_version: u8,
     ) -> Result<Bundle, Error> {
         let name = format!(
             "{}@{}/{}",
@@ -467,11 +535,12 @@ impl CreateCommand {
 
         eprintln!("Fetching or creating bundle for binary...");
 
-        let bundle_params = peridio_sdk::api::bundles::CreateBundleParams {
-            artifact_version_prns: vec![artifact_version.prn.clone()],
-            id: None,
-            name: Some(name),
-        };
+        let bundle_params = create_bundle_params(
+            api_version,
+            vec![artifact_version.prn.clone()],
+            None,
+            Some(name),
+        )?;
 
         match api
             .bundles()
@@ -480,12 +549,10 @@ impl CreateCommand {
             .context(ApiSnafu)?
         {
             Some(bundle_response) => {
-                eprintln!("Using bundle {}", bundle_response.bundle.prn);
+                eprintln!("Using bundle {}", bundle_response.bundle.prn());
                 Ok(bundle_response.bundle)
             }
-            None => Err(Error::Generic {
-                error: "Failed to get bundle for binary".to_string(),
-            }),
+            None => panic!(),
         }
     }
 
@@ -531,9 +598,9 @@ impl CreateCommand {
 
         // Use the bundle name if available, otherwise use a default name
         let name = bundle
-            .name
+            .name()
             .clone()
-            .unwrap_or_else(|| format!("Bundle Override for {}", bundle.prn));
+            .unwrap_or_else(|| format!("Bundle Override for {}", bundle.prn()));
 
         // Use current time as start time (ISO 8601 format)
         let starts_at = OffsetDateTime::now_utc()
@@ -544,11 +611,11 @@ impl CreateCommand {
 
         let create_params = CreateBundleOverrideParams {
             name,
-            bundle_prn: bundle.prn.clone(),
+            bundle_prn: bundle.prn().to_string(),
             starts_at,
             description: Some(format!(
                 "Auto-created bundle override for bundle {}",
-                bundle.prn
+                bundle.prn()
             )),
             ends_at: None, // No end time, active indefinitely
         };
@@ -577,13 +644,14 @@ impl CreateCommand {
     ) -> Result<Release, Error> {
         eprintln!(
             "Creating release for bundle {} in cohort {}",
-            bundle.prn, cohort_prn
+            bundle.prn(),
+            cohort_prn
         );
 
         let name = bundle
-            .name
+            .name()
             .clone()
-            .unwrap_or_else(|| format!("Release for {}", bundle.prn));
+            .unwrap_or_else(|| format!("Release for {}", bundle.prn()));
 
         let schedule_date = OffsetDateTime::now_utc()
             .format(&time::format_description::well_known::Rfc3339)
@@ -592,7 +660,7 @@ impl CreateCommand {
             })?;
 
         let create_params = CreateReleaseParams {
-            bundle_prn: bundle.prn.clone(),
+            bundle_prn: bundle.prn().to_string(),
             cohort_prn: cohort_prn.to_string(),
             name,
             schedule_date,
