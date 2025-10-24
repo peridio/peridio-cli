@@ -25,7 +25,7 @@ use snafu::ResultExt;
 
 #[derive(Parser, Debug)]
 pub enum BinarySignaturesCommand {
-    Create(Command<CreateCommand>),
+    Create(Box<Command<CreateCommand>>),
     Delete(Command<DeleteCommand>),
 }
 
