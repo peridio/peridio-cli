@@ -16,6 +16,7 @@ pub struct ProfileV2 {
     pub api_key: Option<String>,
     pub base_url: Option<String>,
     pub ca_path: Option<String>,
+    pub api_version: Option<u8>,
 }
 
 impl TryFrom<ProfileV1> for ProfileV2 {
@@ -26,6 +27,7 @@ impl TryFrom<ProfileV1> for ProfileV2 {
             api_key: profile_v1.api_key,
             base_url: profile_v1.base_url,
             ca_path: profile_v1.ca_path,
+            api_version: None,
         };
         Ok(profile_v2)
     }

@@ -87,6 +87,18 @@ pub enum ApiCommand {
 }
 
 impl CliCommands {
+    fn show_api_version_warning_if_needed(global_options: &GlobalOptions) {
+        if global_options.api_version.is_none() {
+            let mut warning = StyledStr::new();
+            warning.push_str(Some(Style::Warning), "warning: ".to_string());
+            warning.push_str(
+                None,
+                "No API version specified. Using default version 2.".to_string(),
+            );
+            warning.print_msg().unwrap();
+        }
+    }
+
     pub(crate) async fn run(self, global_options: GlobalOptions) -> Result<(), crate::Error> {
         match self {
             CliCommands::ApiCommand(api) => {
@@ -98,6 +110,8 @@ impl CliCommands {
                 }
 
                 Self::print_missing_arguments(missing_arguments);
+
+                Self::show_api_version_warning_if_needed(&global_options);
 
                 match api {
                     ApiCommand::Artifacts(cmd) => cmd.run(global_options).await?,
@@ -118,7 +132,10 @@ impl CliCommands {
                     ApiCommand::Webhooks(cmd) => cmd.run(global_options).await?,
                 }
             }
-            CliCommands::Users(cmd) => cmd.run(global_options).await?,
+            CliCommands::Users(cmd) => {
+                Self::show_api_version_warning_if_needed(&global_options);
+                cmd.run(global_options).await?
+            }
             CliCommands::Upgrade(cmd) => cmd.run().await?,
             CliCommands::Config(cmd) => cmd.run(global_options).await?,
             CliCommands::X509(cmd) => cmd.run(global_options).await?,
