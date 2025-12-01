@@ -80,10 +80,10 @@ impl Command<CreateCommand> {
 
         // Create profile
         let profile = ProfileV2 {
-            api_key: None,     // We'll store this in the credentials file
-            base_url: None,    // Use default
-            ca_path: None,     // Use default
-            api_version: None, // Use default
+            api_key: None,        // We'll store this in the credentials file
+            base_url: None,       // Use default
+            ca_path: None,        // Use default
+            api_version: Some(2), // Default to API version 2
         };
 
         // Load or create config file

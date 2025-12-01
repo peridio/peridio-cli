@@ -427,6 +427,9 @@ fn config_init_creates_profile() {
     assert!(config["profiles"].is_object());
     assert!(config["profiles"][profile_name].is_object());
 
+    // Verify api_version defaults to 2
+    assert_eq!(config["profiles"][profile_name]["api_version"], 2);
+
     // Verify credentials.json file
     let creds_path = temp_dir.path().join("credentials.json");
     assert!(creds_path.exists(), "credentials.json wasn't created");
@@ -436,4 +439,46 @@ fn config_init_creates_profile() {
 
     assert!(creds.contains_key(profile_name));
     assert_eq!(creds[profile_name]["api_key"], api_key);
+}
+
+#[test]
+fn config_upgrade_sets_api_version() {
+    // Create a temporary directory for config files
+    let temp_dir = tempdir().unwrap();
+    let temp_dir_path = temp_dir.path().to_str().unwrap().to_string();
+
+    // Create a v1 config file (without api_version)
+    let config_path = temp_dir.path().join("config.json");
+    let v1_config = serde_json::json!({
+        "test-profile": {
+            "api_key": "test-key",
+            "base_url": "https://example.com",
+            "ca_path": "/path/to/ca.pem",
+            "organization_name": "test-org"
+        }
+    });
+    fs::write(
+        &config_path,
+        serde_json::to_string_pretty(&v1_config).unwrap(),
+    )
+    .unwrap();
+
+    // Run config upgrade (need to provide dummy profile due to clap constraint)
+    let mut cmd = Command::cargo_bin("peridio-cli").unwrap();
+    cmd.args(["--profile", "dummy-profile"])
+        .args(["--config-directory", &temp_dir_path])
+        .args(["config", "upgrade"])
+        .assert()
+        .success()
+        .stderr(predicates::str::contains(
+            "The config file has been migrated to v2",
+        ));
+
+    // Verify the upgraded config has api_version set to 2
+    let config_content = fs::read_to_string(&config_path).unwrap();
+    let config: serde_json::Value = serde_json::from_str(&config_content).unwrap();
+
+    assert_eq!(config["version"], 2);
+    assert!(config["profiles"]["test-profile"]["api_version"].is_number());
+    assert_eq!(config["profiles"]["test-profile"]["api_version"], 2);
 }
