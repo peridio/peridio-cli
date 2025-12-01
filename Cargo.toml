@@ -6,6 +6,10 @@ repository = "https://github.com/peridio/peridio-cli"
 version = "1.4.0"
 edition = "2021"
 
+[[bin]]
+name = "peridio"
+path = "src/main.rs"
+
 [dependencies]
 peridio-sdk = { git = "https://github.com/peridio/peridio-rust.git", tag = "1.2.0" }
 serde_json = "1.0.125"
