@@ -27,7 +27,7 @@ impl TryFrom<ProfileV1> for ProfileV2 {
             api_key: profile_v1.api_key,
             base_url: profile_v1.base_url,
             ca_path: profile_v1.ca_path,
-            api_version: None,
+            api_version: Some(2),
         };
         Ok(profile_v2)
     }
@@ -147,7 +147,7 @@ impl TryFrom<ConfigV1> for ConfigV2 {
         match ProfilesV2::try_from(config_v1) {
             Ok(profiles_v2) => {
                 let config_v2 = ConfigV2 {
-                    version: 1,
+                    version: 2,
                     profiles: profiles_v2,
                     signing_key_pairs: Some(SigningKeyPairsV2::default()),
                     certificate_authorities: Some(CertificateAuthoritiesV2::default()),
