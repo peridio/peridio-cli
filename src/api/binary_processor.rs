@@ -294,29 +294,13 @@ impl BinaryProcessor {
                 }
             }
 
-            // Show result with failed keyids if any
-            if failed_keyids.is_empty() {
-                eprintln!(
-                    "{} signatures created",
-                    style(format!("{}/{}", successful_signatures, total_signatures)).green()
-                );
-            } else {
-                let ratio_style = if successful_signatures > 0 {
-                    style(format!("{}/{}", successful_signatures, total_signatures)).yellow()
-                } else {
-                    style(format!("{}/{}", successful_signatures, total_signatures)).red()
-                };
-                eprintln!(
-                    "{} signatures created (failed: {})",
-                    ratio_style,
-                    style(failed_keyids.join(", ")).magenta()
-                );
-            }
-
-            // Only return error if no signatures were created at all
-            if successful_signatures == 0 {
+            // Return error if any signatures failed
+            if successful_signatures < total_signatures {
                 return Err(Error::Generic {
-                    error: "No signatures could be created for binary".to_string(),
+                    error: format!(
+                        "Failed to create signatures for binary (failed keyids: {})",
+                        style(failed_keyids.join(", ")).magenta()
+                    ),
                 });
             }
         }

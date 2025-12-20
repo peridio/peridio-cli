@@ -13,6 +13,7 @@ use peridio_sdk::api::binaries::{
     Binary, BinaryState, CreateBinaryParams, CreateBinaryResponse, GetBinaryParams,
     GetBinaryResponse,
 };
+use peridio_sdk::api::bundle_signatures::CreateBundleSignatureParams;
 use peridio_sdk::api::bundles::{
     Bundle, CreateBundleBinary, CreateBundleParams, CreateBundleParamsV2,
 };
@@ -99,32 +100,6 @@ pub struct PushCommand {
     #[arg(long)]
     concurrency: Option<u8>,
 
-    /// The name of a signing key pair in your Peridio CLI config. This will dictate both the private key to create a binary signature with as well as the signing key Peridio will use to verify the binary signature.
-    #[arg(
-        long,
-        short = 's',
-        conflicts_with = "signing_key_private",
-        conflicts_with = "signing_key_prn"
-    )]
-    signing_key_pair: Option<String>,
-
-    /// The private key to create a binary signature with.
-    #[arg(
-        long,
-        conflicts_with = "signing_key_pair",
-        requires = "signing_key_prn"
-    )]
-    signing_key_private: Option<String>,
-
-    /// The PRN of the signing key Peridio will use to verify the binary signature.
-    #[arg(
-        long,
-        conflicts_with = "signing_key_pair",
-        requires = "signing_key_private",
-        value_parser = crate::utils::PRNValueParser::new(crate::utils::PRNType::SigningKey)
-    )]
-    signing_key_prn: Option<String>,
-
     #[clap(skip)]
     global_options: Option<GlobalOptions>,
 }
@@ -183,12 +158,17 @@ impl PushCommand {
             .stream_process_binaries(api, &bundle_json, binary_info_map)
             .await?;
 
+        eprintln!("Pushing bundle...");
+
         // Create the bundle
-        let bundle_prn = self
+        let _bundle_prn = self
             .create_bundle(api, &bundle_json, &final_created_binaries, organization_prn)
             .await?;
 
-        eprintln!("Bundle push completed successfully: {}", bundle_prn);
+        // Sign the bundle if signatures are present
+        // self.sign_bundle(api, &bundle_json, &bundle_prn).await?;
+
+        eprintln!("Bundle push completed successfully");
         Ok(())
     }
 
@@ -329,10 +309,9 @@ impl PushCommand {
         }
 
         eprintln!(
-            "Streaming {} of {} binaries from CPIO archive ({} already processed)",
+            "Streaming {} of {} binaries from CPIO archive",
             binaries_to_process.len(),
-            bundle_json.bundle.manifest.len(),
-            created_binaries.len()
+            bundle_json.bundle.manifest.len()
         );
 
         // Second pass: Stream through archive using manifest order
@@ -383,8 +362,8 @@ impl PushCommand {
             if let Some((manifest_item, version_prn, binary_info)) =
                 binaries_to_process.get(&computed_hash)
             {
-                // Process this binary immediately - handle errors gracefully
-                match self
+                // Process this binary immediately - fail fast on any errors
+                let binary_prn = self
                     .create_and_upload_binary(
                         api,
                         version_prn,
@@ -393,16 +372,10 @@ impl PushCommand {
                         binary_info,
                         &content,
                     )
-                    .await
-                {
-                    Ok(binary_prn) => {
-                        // Update the created_binaries map using binary_id
-                        created_binaries.insert(manifest_item.binary_id.clone(), binary_prn);
-                    }
-                    Err(_e) => {
-                        // Continue to next binary
-                    }
-                }
+                    .await?;
+
+                // Update the created_binaries map using binary_id
+                created_binaries.insert(manifest_item.binary_id.clone(), binary_prn);
             }
             // If binary doesn't need processing, we just skip it (no warning needed)
 
@@ -430,6 +403,7 @@ impl PushCommand {
                 Err(e) => {
                     let error_str = e.to_string();
 
+                    // Only retry on 429 rate limit errors
                     if error_str.contains("too_many_requests") && retries < max_retries {
                         retries += 1;
                         let delay = Duration::from_millis(1000 * 2_u64.pow(retries));
@@ -441,12 +415,8 @@ impl PushCommand {
                         );
                         sleep(delay).await;
                         continue;
-                    } else if retries < max_retries {
-                        retries += 1;
-                        let delay = Duration::from_millis(1000 * retries as u64);
-                        sleep(delay).await;
-                        continue;
                     }
+                    // For all other errors (404, etc.), fail immediately
                     return Err(e);
                 }
             }
@@ -474,7 +444,7 @@ impl PushCommand {
                 error: format!("Failed to construct artifact PRN: {}", e),
             })?;
 
-        // Try to get existing artifact - handle 404/not found as expected case with retry logic
+        // Try to get existing artifact - only retry on 429 rate limits
         let get_result = Self::retry_with_backoff(
             || {
                 let api = api.clone();
@@ -500,13 +470,8 @@ impl PushCommand {
             Ok(None) => {
                 // Artifact doesn't exist, proceed to create
             }
-            Err(e) => {
-                // Check if this is a "not found" error, which is expected
-                eprintln!(
-                    "Could not get artifact {} (likely doesn't exist): {}",
-                    artifact_info.name, e
-                );
-                // Proceed to create - don't fail here
+            Err(_e) => {
+                // Proceed to create - artifact doesn't exist or API issue
             }
         }
 
@@ -514,15 +479,13 @@ impl PushCommand {
         let create_result = Self::retry_with_backoff(
             || {
                 let api = api.clone();
-                let description = artifact_info.description.clone();
-                let name = artifact_info.name.clone();
                 let artifact_id = artifact_id.to_string();
                 async move {
                     let params = CreateArtifactParams {
                         custom_metadata: None,
-                        description,
+                        description: artifact_info.description.clone(),
                         id: Some(artifact_id),
-                        name,
+                        name: artifact_info.name.clone(),
                     };
                     api.artifacts().create(params).await.context(ApiSnafu)
                 }
@@ -569,7 +532,7 @@ impl PushCommand {
                     error: format!("Failed to construct artifact version PRN: {}", e),
                 })?;
 
-        // Try to get existing artifact version - handle 404/not found as expected case with retry logic
+        // Try to get existing artifact version - only retry on 429 rate limits
         let get_result = Self::retry_with_backoff(
             || {
                 let api = api.clone();
@@ -597,13 +560,8 @@ impl PushCommand {
             Ok(None) => {
                 // Artifact version doesn't exist, proceed to create
             }
-            Err(e) => {
-                // Check if this is a "not found" error, which is expected
-                eprintln!(
-                    "Could not get artifact version v{} (likely doesn't exist): {}",
-                    version_info.version, e
-                );
-                // Proceed to create - don't fail here
+            Err(_e) => {
+                // Proceed to create - version doesn't exist or API issue
             }
         }
 
@@ -612,16 +570,14 @@ impl PushCommand {
             || {
                 let api = api.clone();
                 let artifact_prn = artifact_prn.to_string();
-                let description = version_info.description.clone();
-                let version = version_info.version.clone();
                 let version_id = version_id.to_string();
                 async move {
                     let params = CreateArtifactVersionParams {
                         artifact_prn,
                         custom_metadata: None,
-                        description,
+                        description: version_info.description.clone(),
                         id: Some(version_id),
-                        version,
+                        version: version_info.version.clone(),
                     };
                     api.artifact_versions()
                         .create(params)
@@ -776,8 +732,10 @@ impl PushCommand {
                     .await?;
 
                 eprintln!(
-                    "Created and processed new binary: {} (state: {:?})",
-                    binary_id, processed_binary.state
+                    "{} {} (state: {})",
+                    style("Created and processed new binary:").green(),
+                    style(binary_id).cyan(),
+                    style(format!("{:?}", processed_binary.state)).yellow()
                 );
                 Ok(processed_binary.prn)
             }
@@ -839,6 +797,44 @@ impl PushCommand {
         }
     }
 
+    #[allow(dead_code)]
+    async fn sign_bundle(
+        &self,
+        api: &Api,
+        bundle_json: &BundleJson,
+        bundle_prn: &str,
+    ) -> Result<(), Error> {
+        if bundle_json.bundle.signatures.is_empty() {
+            return Ok(());
+        }
+
+        for sig_info in &bundle_json.bundle.signatures {
+            let params = CreateBundleSignatureParams {
+                bundle_prn: bundle_prn.to_string(),
+                signing_key_prn: None,
+                signature: sig_info.sig.clone(),
+                signing_key_keyid: Some(sig_info.keyid.clone()),
+            };
+
+            if api
+                .bundle_signatures()
+                .create(params)
+                .await
+                .context(crate::ApiSnafu)
+                .is_err()
+            {
+                return Err(Error::Generic {
+                    error: format!(
+                        "Failed to create signatures for bundle (failed keyids: {})",
+                        style(sig_info.keyid.clone()).magenta()
+                    ),
+                });
+            }
+        }
+
+        Ok(())
+    }
+
     fn construct_binary_prn(&self, version_prn: &str, binary_id: &str) -> Result<String, Error> {
         let prn_builder = PRNBuilder::from_prn(version_prn).map_err(|e| Error::Generic {
             error: format!("Failed to parse version PRN {}: {}", version_prn, e),
@@ -859,8 +855,9 @@ impl PushCommand {
             Some(existing_hash) => {
                 if existing_hash != &manifest_item.hash {
                     eprintln!(
-                        "Found binary with binary_id {} but hash mismatch. Expected: {}, Found: {}. Creating new binary.",
-                        binary_id, manifest_item.hash, existing_hash
+                        "Found binary with binary_id {} but hash mismatch. Expected: {}, Found: {}. {}",
+                        binary_id, manifest_item.hash, existing_hash,
+                        style("Creating new binary.").green()
                     );
                     false
                 } else {
@@ -869,8 +866,9 @@ impl PushCommand {
             }
             None => {
                 eprintln!(
-                    "Found binary with binary_id {} but it has no hash. This may be an incomplete binary. Creating new binary.",
-                    binary_id
+                    "Found binary with binary_id {} but it has no hash. This may be an incomplete binary. {}",
+                    binary_id,
+                    style("Creating new binary.").green()
                 );
                 false
             }
@@ -928,9 +926,10 @@ impl PushCommand {
             }
             _ => {
                 eprintln!(
-                    "Found binary with PRN {} but it's in state {:?} which is not processable. Creating new binary.",
-                    binary.prn,
-                    binary.state
+                    "Found binary with PRN {} but it's in state {} which is not processable. {}",
+                    style(&binary.prn).cyan(),
+                    style(format!("{:?}", binary.state)).yellow(),
+                    style("Creating new binary.").green()
                 );
                 Err(Error::Generic {
                     error: format!(

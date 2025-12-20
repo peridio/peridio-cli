@@ -294,16 +294,16 @@ pub struct CreateCommand {
 impl CreateCommand {
     /// Validate that private keys and PRNs are properly paired
     fn validate_private_key_prn_pairing(&self) -> Result<(), Error> {
-        if !self.signing_key_private.is_empty() || !self.signing_key_prn.is_empty() {
-            if self.signing_key_private.len() != self.signing_key_prn.len() {
-                return Err(Error::Generic {
-                    error: format!(
-                        "Number of private keys ({}) must match number of PRNs ({})",
-                        self.signing_key_private.len(),
-                        self.signing_key_prn.len()
-                    ),
-                });
-            }
+        if (!self.signing_key_private.is_empty() || !self.signing_key_prn.is_empty())
+            && self.signing_key_private.len() != self.signing_key_prn.len()
+        {
+            return Err(Error::Generic {
+                error: format!(
+                    "Number of private keys ({}) must match number of PRNs ({})",
+                    self.signing_key_private.len(),
+                    self.signing_key_prn.len()
+                ),
+            });
         }
         Ok(())
     }

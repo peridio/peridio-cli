@@ -15,10 +15,9 @@ use reqwest::Body;
 use reqwest::Client;
 use sha2::{Digest, Sha256};
 use std::cmp;
-use std::io::{Read, Seek, SeekFrom};
+use std::io;
 use std::sync::Arc;
 use std::thread::available_parallelism;
-use std::{fs, io};
 
 pub struct BinaryUploader {
     binary_part_size: u64,
@@ -60,7 +59,7 @@ impl BinaryUploader {
         content: &[u8],
     ) -> Result<(), Error> {
         let file_size = content.len() as u64;
-        let chunks_length = (file_size + self.binary_part_size - 1) / self.binary_part_size;
+        let chunks_length = file_size.div_ceil(self.binary_part_size);
 
         let client = Client::new();
         let binary_parts = self.get_binary_parts(binary, api, &global_options).await?;
@@ -76,83 +75,6 @@ impl BinaryUploader {
             &binary_parts,
         )
         .await
-    }
-
-    #[allow(dead_code)]
-    async fn upload_binary_parts_from_file(
-        &self,
-        binary: &Binary,
-        api: &Api,
-        global_options: GlobalOptions,
-        file_path: &str,
-        file_size: u64,
-        chunks_length: u64,
-        client: &Client,
-        binary_parts: &[ListBinaryPart],
-    ) -> Result<(), Error> {
-        eprintln!("Creating binary parts and uploading...");
-        let pb = Arc::new(ProgressBar::new(file_size));
-        pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
-            .unwrap()
-            .with_key("eta", |state: &ProgressState, w: &mut dyn std::fmt::Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
-            .progress_chars("#>-"));
-
-        let result = stream::iter(1..=chunks_length)
-            .map(|index| {
-                let client = client.clone();
-                let binary_part_size = self.binary_part_size;
-                let global_options = global_options.clone();
-                let api = api.clone();
-                let binary = binary.clone();
-                let file_path = file_path.to_string();
-                let binary_parts = binary_parts.to_vec();
-                let pb = Arc::clone(&pb);
-                tokio::spawn(async move {
-                    // we ignore the ones we already created
-                    if let Some(binary_part) = binary_parts.iter().find(|x| x.index as u64 == index)
-                    {
-                        if matches!(binary_part.state, BinaryPartState::Valid) {
-                            pb.inc(binary_part.size);
-                            return;
-                        }
-                    }
-
-                    // we want to open the file in each thread, this is due to concurrency issues
-                    // when using `Seek` from different threads theres a race condition in the data
-                    let mut file = fs::File::open(&file_path).unwrap();
-
-                    let file_position = binary_part_size * (index - 1);
-
-                    file.seek(SeekFrom::Start(file_position)).unwrap();
-
-                    let mut buffer = vec![0; binary_part_size.try_into().unwrap()];
-
-                    let n = file.read(&mut buffer[..]).unwrap();
-
-                    if n > 0 {
-                        let mut mut_buffer = vec![0; n];
-                        mut_buffer.copy_from_slice(&buffer[..n]);
-
-                        Self::upload_chunk(
-                            &binary,
-                            &api,
-                            global_options,
-                            &client,
-                            &pb,
-                            index,
-                            mut_buffer,
-                            n,
-                        )
-                        .await;
-                    }
-                })
-            })
-            .buffer_unordered(self.concurrency.into());
-
-        let _ = result.collect::<Vec<_>>().await;
-        pb.finish_and_clear();
-
-        Ok(())
     }
 
     async fn upload_binary_parts_from_memory(
