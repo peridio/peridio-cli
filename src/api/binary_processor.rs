@@ -4,6 +4,7 @@ use crate::Error;
 use crate::GlobalOptions;
 
 use backon::{ConstantBuilder, Retryable};
+use console::style;
 use peridio_sdk::api::binaries::{
     Binary, BinaryState, GetBinaryParams, GetBinaryResponse, UpdateBinaryParams,
     UpdateBinaryResponse,
@@ -118,7 +119,6 @@ impl BinaryProcessor {
             }
             BinaryState::Signable => {
                 if self.has_signing_config() {
-                    eprintln!("Signing binary...");
                     self.sign_binary(binary, api).await
                 } else {
                     Ok(binary.clone())
@@ -147,7 +147,6 @@ impl BinaryProcessor {
         if self.has_signing_config() {
             eprintln!("Waiting for cloud hashing...");
             let binary = self.wait_for_signable_state(&binary, api).await?;
-            eprintln!("Signing binary...");
             self.sign_binary(&binary, api).await
         } else {
             Ok(binary)
@@ -163,7 +162,6 @@ impl BinaryProcessor {
         if self.has_signing_config() {
             eprintln!("Waiting for cloud hashing...");
             let binary = self.wait_for_signable_state(&binary, api).await?;
-            eprintln!("Signing binary...");
             self.sign_binary(&binary, api).await
         } else {
             Ok(binary)
@@ -249,12 +247,11 @@ impl BinaryProcessor {
     /// Sign the binary with multiple signatures (consolidated approach)
     async fn sign_binary(&self, binary: &Binary, api: &Api) -> Result<Binary, Error> {
         if !self.config.signatures.is_empty() {
-            eprintln!(
-                "Creating {} signatures for binary",
-                self.config.signatures.len()
-            );
+            let mut successful_signatures = 0;
+            let total_signatures = self.config.signatures.len();
+            let mut failed_keyids = Vec::new();
 
-            for (i, sig_config) in self.config.signatures.iter().enumerate() {
+            for sig_config in self.config.signatures.iter() {
                 if sig_config.needs_computation() {
                     // Compute signature using signing configuration
                     let command = crate::api::binary_signatures::CreateCommand {
@@ -268,34 +265,59 @@ impl BinaryProcessor {
                         binary_content_hash: self.config.binary_content_hash.clone(),
                     };
 
-                    command.run(self.config.global_options.clone()).await?;
-
-                    eprintln!(
-                        "Computed signature {}/{} with keyid: {}",
-                        i + 1,
-                        self.config.signatures.len(),
-                        sig_config.keyid
-                    );
+                    match command.run(self.config.global_options.clone()).await {
+                        Ok(_) => successful_signatures += 1,
+                        Err(_) => failed_keyids.push(sig_config.keyid.clone()),
+                    }
                 } else {
                     // Use pre-computed signature
                     let params = peridio_sdk::api::binary_signatures::CreateBinarySignatureParams {
                         binary_prn: binary.prn.clone(),
-                        signing_key_prn: sig_config.keyid.clone(),
+                        signing_key_prn: None,
                         signature: sig_config.signature.clone(),
+                        signing_key_keyid: Some(sig_config.keyid.clone()),
                     };
 
-                    api.binary_signatures()
+                    match api
+                        .binary_signatures()
                         .create(params)
                         .await
-                        .context(crate::ApiSnafu)?;
-
-                    eprintln!(
-                        "Created signature {}/{} with keyid: {}",
-                        i + 1,
-                        self.config.signatures.len(),
-                        sig_config.keyid
-                    );
+                        .context(crate::ApiSnafu)
+                    {
+                        Ok(_) => {
+                            successful_signatures += 1;
+                        }
+                        Err(_) => {
+                            failed_keyids.push(sig_config.keyid.clone());
+                        }
+                    }
                 }
+            }
+
+            // Show result with failed keyids if any
+            if failed_keyids.is_empty() {
+                eprintln!(
+                    "{} signatures created",
+                    style(format!("{}/{}", successful_signatures, total_signatures)).green()
+                );
+            } else {
+                let ratio_style = if successful_signatures > 0 {
+                    style(format!("{}/{}", successful_signatures, total_signatures)).yellow()
+                } else {
+                    style(format!("{}/{}", successful_signatures, total_signatures)).red()
+                };
+                eprintln!(
+                    "{} signatures created (failed: {})",
+                    ratio_style,
+                    style(failed_keyids.join(", ")).magenta()
+                );
+            }
+
+            // Only return error if no signatures were created at all
+            if successful_signatures == 0 {
+                return Err(Error::Generic {
+                    error: "No signatures could be created for binary".to_string(),
+                });
             }
         }
         // No fallback needed - all signing should go through signatures field

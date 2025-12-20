@@ -173,8 +173,9 @@ impl CreateCommand {
 
         let params = CreateBinarySignatureParams {
             binary_prn: self.binary_prn,
-            signing_key_prn,
+            signing_key_prn: Some(signing_key_prn),
             signature,
+            signing_key_keyid: None,
         };
 
         let api = if let Some(api) = self.api {

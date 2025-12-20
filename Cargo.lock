@@ -1545,7 +1545,7 @@ dependencies = [
 [[package]]
 name = "peridio-sdk"
 version = "1.2.0"
-source = "git+https://github.com/peridio/peridio-rust.git?branch=jwong-eng-1139#916aad2b5b71cfa24314004325c0e13751a745ee"
+source = "git+https://github.com/peridio/peridio-rust.git?branch=jwong-eng-1139#27b800bb0a006b1a8605651538c1cad8d528f0e7"
 dependencies = [
  "chrono",
  "reqwest",
@@ -2857,7 +2857,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
