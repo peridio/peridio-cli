@@ -10,7 +10,8 @@ use clap::Parser;
 use peridio_sdk::api::artifact_versions::{CreateArtifactVersionParams, GetArtifactVersionParams};
 use peridio_sdk::api::artifacts::{CreateArtifactParams, GetArtifactParams};
 use peridio_sdk::api::binaries::{
-    BinaryState, CreateBinaryParams, CreateBinaryResponse, GetBinaryParams, GetBinaryResponse,
+    Binary, BinaryState, CreateBinaryParams, CreateBinaryResponse, GetBinaryParams,
+    GetBinaryResponse,
 };
 use peridio_sdk::api::bundles::{
     Bundle, CreateBundleBinary, CreateBundleParams, CreateBundleParamsV2,
@@ -46,13 +47,13 @@ pub struct ArtifactVersionInfo {
     pub binaries: HashMap<String, BinaryInfo>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct BinaryInfo {
     pub description: Option<String>,
     pub signatures: Vec<SignatureInfo>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct SignatureInfo {
     pub keyid: String,
     pub sig: String,
@@ -69,7 +70,7 @@ pub struct BundleInfo {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ManifestItem {
     pub hash: String,
-    pub length: u64,
+    pub size: u64,
     pub binary_id: String,
     pub target: String,
     pub artifact_version_id: String,
@@ -131,43 +132,96 @@ impl Command<PushCommand> {
         self.inner.global_options = Some(global_options.clone());
         eprintln!("Opening archive: {}", self.inner.path.display());
 
+        // Only proceed with API calls if we have an API key
+        if global_options.api_key.is_none() {
+            return Err(Error::Generic {
+                error: "API key is required for bundle push operation".to_string(),
+            });
+        }
+
+        let api = Api::from(global_options);
+
+        // Get organization PRN from current user
+        let organization_prn = match api.users().me().await.context(ApiSnafu)? {
+            Some(user_response) => user_response.data.organization_prn,
+            None => {
+                return Err(Error::Generic {
+                    error: "Unable to get current user information".to_string(),
+                });
+            }
+        };
+
+        // Stream process the archive
+        self.inner
+            .stream_process_bundle(&api, &organization_prn)
+            .await?;
+
+        Ok(())
+    }
+}
+
+impl PushCommand {
+    async fn stream_process_bundle(&self, api: &Api, organization_prn: &str) -> Result<(), Error> {
+        // First pass: extract and parse bundle.json
+        let bundle_json = self.extract_bundle_json().await?;
+
+        eprintln!(
+            "Processing bundle with {} artifacts",
+            bundle_json.artifacts.len()
+        );
+
+        // Create artifacts and versions first
+        let binary_info_map = self
+            .create_artifacts_and_versions(api, &bundle_json, organization_prn)
+            .await?;
+
+        // Second pass: stream process binaries
+        let final_created_binaries = self
+            .stream_process_binaries(api, &bundle_json, binary_info_map)
+            .await?;
+
+        // Create the bundle
+        let bundle_prn = self
+            .create_bundle(api, &bundle_json, &final_created_binaries, organization_prn)
+            .await?;
+
+        eprintln!("Bundle push completed successfully: {}", bundle_prn);
+        Ok(())
+    }
+
+    async fn extract_bundle_json(&self) -> Result<BundleJson, Error> {
         // Open and decompress the zstd file
-        let file = std::fs::File::open(&self.inner.path).map_err(|e| Error::Generic {
-            error: format!("Failed to open file {}: {}", self.inner.path.display(), e),
+        let file = std::fs::File::open(&self.path).map_err(|e| Error::Generic {
+            error: format!("Failed to open file {}: {}", self.path.display(), e),
         })?;
 
         let zstd_reader = zstd::Decoder::new(file).map_err(|e| Error::Generic {
             error: format!("Failed to create zstd decoder: {}", e),
         })?;
 
-        // Extract the cpio archive
-        let mut bundle_json: Option<BundleJson> = None;
-        let mut binary_files: HashMap<String, Vec<u8>> = HashMap::new();
         let mut archive = zstd_reader;
+        let mut bundle_json: Option<BundleJson> = None;
 
-        // Read all entries from the cpio archive using a loop
+        // Stream through archive looking for bundle.json
         loop {
             let mut cpio_reader = cpio::NewcReader::new(archive).map_err(|e| Error::Generic {
                 error: format!("Failed to create cpio reader: {}", e),
             })?;
 
-            // Check if this is the trailer (end of archive)
             if cpio_reader.entry().is_trailer() {
                 break;
             }
 
             let name = cpio_reader.entry().name().to_string();
-            let mut content = Vec::new();
-
-            // Read the file content
-            cpio_reader
-                .read_to_end(&mut content)
-                .map_err(|e| Error::Generic {
-                    error: format!("Failed to read file content for {}: {}", name, e),
-                })?;
 
             if name.ends_with("bundle.json") {
-                // Parse the bundle.json
+                let mut content = Vec::new();
+                cpio_reader
+                    .read_to_end(&mut content)
+                    .map_err(|e| Error::Generic {
+                        error: format!("Failed to read bundle.json content: {}", e),
+                    })?;
+
                 let json_str = String::from_utf8(content).map_err(|e| Error::Generic {
                     error: format!("Invalid UTF-8 in bundle.json: {}", e),
                 })?;
@@ -178,197 +232,234 @@ impl Command<PushCommand> {
                     })?);
 
                 eprintln!("Parsed bundle.json");
-            } else if !name.is_empty() && !content.is_empty() && !name.ends_with("bundle.json") {
-                // Store binary files for later upload
-                eprintln!("Extracted binary file: {}", name);
-                binary_files.insert(name, content);
+                break;
+            }
+
+            // Skip this entry and move to next
+            archive = cpio_reader.finish().map_err(|e| Error::Generic {
+                error: format!("Failed to finish reading cpio entry: {}", e),
+            })?;
+        }
+
+        bundle_json.ok_or_else(|| Error::Generic {
+            error: "bundle.json not found in archive".to_string(),
+        })
+    }
+
+    async fn create_artifacts_and_versions(
+        &self,
+        api: &Api,
+        bundle_json: &BundleJson,
+        organization_prn: &str,
+    ) -> Result<HashMap<String, (String, BinaryInfo)>, Error> {
+        let mut binary_info_map: HashMap<String, (String, BinaryInfo)> = HashMap::new();
+
+        // Create artifacts and versions (no binary content needed)
+        for (artifact_id, artifact_info) in &bundle_json.artifacts {
+            let artifact_prn = self
+                .get_or_create_artifact(api, artifact_id, artifact_info, organization_prn)
+                .await?;
+
+            for (version_id, version_info) in &artifact_info.versions {
+                let version_prn = self
+                    .get_or_create_artifact_version(
+                        api,
+                        &artifact_prn,
+                        version_id,
+                        version_info,
+                        organization_prn,
+                    )
+                    .await?;
+
+                // Store binary info with version PRN for each binary
+                for (binary_id, binary_info) in &version_info.binaries {
+                    binary_info_map.insert(
+                        binary_id.clone(),
+                        (version_prn.clone(), binary_info.clone()),
+                    );
+                }
+            }
+        }
+
+        Ok(binary_info_map)
+    }
+
+    async fn stream_process_binaries(
+        &self,
+        api: &Api,
+        bundle_json: &BundleJson,
+        binary_info_map: HashMap<String, (String, BinaryInfo)>,
+    ) -> Result<HashMap<String, String>, Error> {
+        let mut created_binaries: HashMap<String, String> = HashMap::new();
+
+        // First pass: Check existing binary states to build ordered list of binaries to process
+        let mut binaries_needing_processing = std::collections::HashSet::new();
+        for manifest_item in &bundle_json.bundle.manifest {
+            if let Some((version_prn, binary_info)) = binary_info_map.get(&manifest_item.binary_id)
+            {
+                let binary_prn =
+                    self.construct_binary_prn(version_prn, &manifest_item.binary_id)?;
+                let get_params = GetBinaryParams { prn: binary_prn };
+
+                if let Ok(Some(GetBinaryResponse { binary })) =
+                    api.binaries().get(get_params).await.context(ApiSnafu)
+                {
+                    // Check if binary is already in a final state
+                    match binary.state {
+                        BinaryState::Signable | BinaryState::Signed => {
+                            eprintln!(
+                                "Found existing binary with PRN {} in state {:?}. Skipping CPIO streaming.",
+                                binary.prn, binary.state
+                            );
+                            created_binaries.insert(manifest_item.binary_id.clone(), binary.prn);
+                            continue;
+                        }
+                        _ => {
+                            // Need to process this binary
+                            binaries_needing_processing.insert(manifest_item.binary_id.clone());
+                        }
+                    }
+                } else {
+                    // Binary doesn't exist - need to process
+                    binaries_needing_processing.insert(manifest_item.binary_id.clone());
+                }
+            }
+        }
+
+        // If no binaries need processing, return early
+        if binaries_needing_processing.is_empty() {
+            eprintln!(
+                "✓ All {} binaries already in desired state - skipped CPIO streaming entirely",
+                created_binaries.len()
+            );
+            return Ok(created_binaries);
+        }
+
+        eprintln!(
+            "Streaming {} of {} binaries from CPIO archive ({} already processed)",
+            binaries_needing_processing.len(),
+            bundle_json.bundle.manifest.len(),
+            created_binaries.len()
+        );
+
+        // Second pass: Stream through archive using manifest order
+        let file = std::fs::File::open(&self.path).map_err(|e| Error::Generic {
+            error: format!("Failed to open file {}: {}", self.path.display(), e),
+        })?;
+
+        let zstd_reader = zstd::Decoder::new(file).map_err(|e| Error::Generic {
+            error: format!("Failed to create zstd decoder: {}", e),
+        })?;
+
+        let mut archive = zstd_reader;
+        let mut manifest_index = 0;
+
+        // Stream through archive processing binaries in manifest order
+        loop {
+            let mut cpio_reader = cpio::NewcReader::new(archive).map_err(|e| Error::Generic {
+                error: format!("Failed to create cpio reader: {}", e),
+            })?;
+
+            if cpio_reader.entry().is_trailer() {
+                break;
+            }
+
+            let name = cpio_reader.entry().name().to_string();
+
+            // Skip bundle.json and empty entries
+            if name.ends_with("bundle.json") || name.is_empty() {
+                archive = cpio_reader.finish().map_err(|e| Error::Generic {
+                    error: format!("Failed to finish reading cpio entry: {}", e),
+                })?;
+                continue;
+            }
+
+            // Get the corresponding manifest item (assumes ordered archive)
+            if manifest_index >= bundle_json.bundle.manifest.len() {
+                return Err(Error::Generic {
+                    error: format!(
+                        "Archive contains more binaries than manifest entries. Expected {} binaries, found extra: {}",
+                        bundle_json.bundle.manifest.len(), name
+                    ),
+                });
+            }
+
+            let manifest_item = &bundle_json.bundle.manifest[manifest_index];
+            let binary_info_entry = binary_info_map.get(&manifest_item.binary_id);
+
+            // Check if we need to process this binary
+            if binaries_needing_processing.contains(&manifest_item.binary_id) {
+                if let Some((version_prn, binary_info)) = binary_info_entry {
+                    eprintln!("Processing binary file: {} (needs processing)", name);
+
+                    // Read binary content into memory
+                    let mut content = Vec::new();
+                    cpio_reader
+                        .read_to_end(&mut content)
+                        .map_err(|e| Error::Generic {
+                            error: format!("Failed to read binary content for {}: {}", name, e),
+                        })?;
+
+                    // Runtime verification: compute hash to verify ordering assumption
+                    let mut hasher = sha2::Sha256::new();
+                    hasher.update(&content);
+                    let computed_hash = format!("{:x}", hasher.finalize());
+
+                    if computed_hash != manifest_item.hash {
+                        return Err(Error::Generic {
+                            error: format!(
+                                "Archive ordering mismatch! Binary {} at position {} has hash {} but manifest expects {}. Archive binaries must match manifest order.",
+                                name, manifest_index, computed_hash, manifest_item.hash
+                            ),
+                        });
+                    }
+
+                    // Process this binary immediately
+                    let binary_prn = self
+                        .create_and_upload_binary(
+                            api,
+                            version_prn,
+                            &manifest_item.binary_id,
+                            manifest_item,
+                            binary_info,
+                            &content,
+                        )
+                        .await?;
+
+                    // Update the created_binaries map using binary_id
+                    created_binaries.insert(manifest_item.binary_id.clone(), binary_prn);
+                }
+            } else {
+                // Binary already processed - skip content reading entirely
+                let content_size = cpio_reader.entry().file_size();
+                std::io::copy(&mut cpio_reader.take(content_size), &mut std::io::sink()).map_err(
+                    |e| Error::Generic {
+                        error: format!("Failed to skip binary content for {}: {}", name, e),
+                    },
+                )?;
             }
 
             // Move to next entry
             archive = cpio_reader.finish().map_err(|e| Error::Generic {
                 error: format!("Failed to finish reading cpio entry: {}", e),
             })?;
+            manifest_index += 1;
         }
 
-        let bundle_json = bundle_json.ok_or_else(|| Error::Generic {
-            error: "bundle.json not found in archive".to_string(),
-        })?;
-
-        eprintln!(
-            "Processing bundle with {} artifacts",
-            bundle_json.artifacts.len()
-        );
-
-        // Only proceed with API calls if we have an API key
-        if global_options.api_key.is_some() {
-            let api = Api::from(global_options);
-
-            // Get organization PRN from current user
-            let organization_prn = match api.users().me().await.context(ApiSnafu)? {
-                Some(user_response) => user_response.data.organization_prn,
-                None => {
-                    return Err(Error::Generic {
-                        error: "Unable to get current user information".to_string(),
-                    });
-                }
-            };
-
-            // Process resources in order: artifact -> artifact versions -> binaries -> bundle
-            self.inner
-                .process_bundle(&api, bundle_json, binary_files, &organization_prn)
-                .await?;
-        } else {
+        // Verify we processed all expected binaries
+        if manifest_index != bundle_json.bundle.manifest.len() {
             return Err(Error::Generic {
-                error: "API key is required for bundle push operation".to_string(),
+                error: format!(
+                    "Archive contains fewer binaries than manifest entries. Expected {} binaries, found {}",
+                    bundle_json.bundle.manifest.len(), manifest_index
+                ),
             });
         }
 
-        Ok(())
-    }
-}
-
-impl PushCommand {
-    async fn process_bundle(
-        &self,
-        api: &Api,
-        bundle_json: BundleJson,
-        binary_files: HashMap<String, Vec<u8>>,
-        organization_prn: &str,
-    ) -> Result<(), Error> {
-        // Step 1: Get or create artifacts (log errors and continue)
-        let mut created_artifacts = HashMap::new();
-        for (artifact_id, artifact_info) in &bundle_json.artifacts {
-            match self
-                .create_or_get_artifact(api, artifact_id, artifact_info, organization_prn)
-                .await
-            {
-                Ok(prn) => {
-                    created_artifacts.insert(artifact_id.clone(), prn);
-                }
-                Err(e) => {
-                    eprintln!(
-                        "⚠ Failed to get/create artifact {}: {}",
-                        artifact_info.name, e
-                    );
-                    // Continue processing other artifacts
-                }
-            }
-        }
-
-        // Step 2: Get or create artifact versions (log errors and continue)
-        let mut created_versions = HashMap::new();
-        for (artifact_id, artifact_info) in &bundle_json.artifacts {
-            if let Some(artifact_prn) = created_artifacts.get(artifact_id) {
-                for (version_id, version_info) in &artifact_info.versions {
-                    match self
-                        .create_or_get_artifact_version(
-                            api,
-                            artifact_prn,
-                            version_id,
-                            version_info,
-                            organization_prn,
-                        )
-                        .await
-                    {
-                        Ok(prn) => {
-                            created_versions.insert(version_id.clone(), prn);
-                        }
-                        Err(e) => {
-                            eprintln!(
-                                "⚠ Failed to get/create artifact version {} v{}: {}",
-                                artifact_info.name, version_info.version, e
-                            );
-                            // Continue processing other versions
-                        }
-                    }
-                }
-            }
-        }
-
-        // Step 3: Create binaries (fail on error) and upload content
-        let mut created_binaries = HashMap::new();
-        for manifest_item in &bundle_json.bundle.manifest {
-            let artifact_info = bundle_json
-                .artifacts
-                .get(&manifest_item.artifact_id)
-                .ok_or_else(|| Error::Generic {
-                    error: format!(
-                        "Artifact {} not found in bundle.json",
-                        manifest_item.artifact_id
-                    ),
-                })?;
-
-            let version_info = artifact_info
-                .versions
-                .get(&manifest_item.artifact_version_id)
-                .ok_or_else(|| Error::Generic {
-                    error: format!(
-                        "Artifact version {} not found",
-                        manifest_item.artifact_version_id
-                    ),
-                })?;
-
-            let binary_info = version_info
-                .binaries
-                .get(&manifest_item.binary_id)
-                .ok_or_else(|| Error::Generic {
-                    error: format!(
-                        "Binary {} not found in artifact version {}. Available binaries: {}",
-                        manifest_item.binary_id,
-                        manifest_item.artifact_version_id,
-                        version_info
-                            .binaries
-                            .keys()
-                            .map(|k| k.as_str())
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    ),
-                })?;
-
-            if let Some(version_prn) = created_versions.get(&manifest_item.artifact_version_id) {
-                match self
-                    .create_and_upload_binary(
-                        api,
-                        version_prn,
-                        &manifest_item.binary_id,
-                        manifest_item,
-                        binary_info,
-                        &binary_files,
-                    )
-                    .await
-                {
-                    Ok(prn) => {
-                        created_binaries.insert(manifest_item.binary_id.clone(), prn);
-                        eprintln!("✓ Binary processed: {}", manifest_item.binary_id);
-                    }
-                    Err(e) => {
-                        return Err(Error::Generic {
-                            error: format!(
-                                "Failed to create/upload binary {}: {}",
-                                manifest_item.binary_id, e
-                            ),
-                        });
-                    }
-                }
-            }
-        }
-
-        // Step 4: Create bundle (fail on error)
-        match self
-            .create_bundle(api, &bundle_json, &created_binaries, organization_prn)
-            .await
-        {
-            Ok(_) => {
-                eprintln!("✓ Bundle processed successfully");
-                Ok(())
-            }
-            Err(e) => Err(Error::Generic {
-                error: format!("Failed to create bundle: {}", e),
-            }),
-        }
+        Ok(created_binaries)
     }
 
-    async fn create_or_get_artifact(
+    async fn get_or_create_artifact(
         &self,
         api: &Api,
         artifact_id: &str,
@@ -391,49 +482,51 @@ impl PushCommand {
 
         let get_params = GetArtifactParams { prn: artifact_prn };
 
-        match api.artifacts().get(get_params).await.context(ApiSnafu) {
-            Ok(Some(response)) => {
-                // Artifact already exists, return its PRN
-                eprintln!("Found existing artifact: {}", artifact_info.name);
-                Ok(response.artifact.prn)
-            }
-            Ok(None) => {
-                // Artifact doesn't exist, create it
-                let create_params = CreateArtifactParams {
-                    custom_metadata: None,
-                    description: artifact_info.description.clone(),
-                    id: Some(artifact_id.to_string()),
-                    name: artifact_info.name.clone(),
-                };
-
-                match api
-                    .artifacts()
-                    .create(create_params)
-                    .await
-                    .context(ApiSnafu)
-                {
-                    Ok(Some(response)) => {
-                        eprintln!("Created new artifact: {}", artifact_info.name);
-                        Ok(response.artifact.prn)
-                    }
-                    Ok(None) => Err(Error::Generic {
-                        error: "No response from artifact creation".to_string(),
-                    }),
-                    Err(e) => Err(Error::Generic {
-                        error: format!("Failed to create artifact {}: {}", artifact_info.name, e),
-                    }),
-                }
-            }
-            Err(e) => Err(Error::Generic {
+        // Try to get existing artifact
+        let get_result = api
+            .artifacts()
+            .get(get_params)
+            .await
+            .context(ApiSnafu)
+            .map_err(|e| Error::Generic {
                 error: format!(
                     "Failed to check for existing artifact {}: {}",
                     artifact_info.name, e
                 ),
+            })?;
+
+        // If artifact exists, return its PRN
+        if let Some(response) = get_result {
+            eprintln!("Found existing artifact: {}", artifact_info.name);
+            return Ok(response.artifact.prn);
+        }
+
+        // Artifact doesn't exist, create it
+        let create_params = CreateArtifactParams {
+            custom_metadata: None,
+            description: artifact_info.description.clone(),
+            id: Some(artifact_id.to_string()),
+            name: artifact_info.name.clone(),
+        };
+
+        let create_result = api
+            .artifacts()
+            .create(create_params)
+            .await
+            .context(ApiSnafu)?;
+
+        match create_result {
+            Some(response) => {
+                eprintln!("Created new artifact: {}", artifact_info.name);
+                Ok(response.artifact.prn)
+            }
+            None => Err(Error::Generic {
+                error: "No response from artifact creation".to_string(),
             }),
         }
     }
 
-    async fn create_or_get_artifact_version(
+    async fn get_or_create_artifact_version(
         &self,
         api: &Api,
         artifact_prn: &str,
@@ -461,53 +554,47 @@ impl PushCommand {
             prn: artifact_version_prn,
         };
 
-        match api
+        // Try to get existing artifact version
+        let get_result = api
             .artifact_versions()
             .get(get_params)
             .await
             .context(ApiSnafu)
-        {
-            Ok(Some(response)) => {
-                // Artifact version already exists, return its PRN
-                eprintln!("Found existing artifact version: v{}", version_info.version);
-                Ok(response.artifact_version.prn)
-            }
-            Ok(None) => {
-                // Artifact version doesn't exist, create it
-                let create_params = CreateArtifactVersionParams {
-                    artifact_prn: artifact_prn.to_string(),
-                    custom_metadata: None,
-                    description: version_info.description.clone(),
-                    id: Some(version_id.to_string()),
-                    version: version_info.version.clone(),
-                };
-
-                match api
-                    .artifact_versions()
-                    .create(create_params)
-                    .await
-                    .context(ApiSnafu)
-                {
-                    Ok(Some(response)) => {
-                        eprintln!("Created new artifact version: v{}", version_info.version);
-                        Ok(response.artifact_version.prn)
-                    }
-                    Ok(None) => Err(Error::Generic {
-                        error: "No response from artifact version creation".to_string(),
-                    }),
-                    Err(e) => Err(Error::Generic {
-                        error: format!(
-                            "Failed to create artifact version v{}: {}",
-                            version_info.version, e
-                        ),
-                    }),
-                }
-            }
-            Err(e) => Err(Error::Generic {
+            .map_err(|e| Error::Generic {
                 error: format!(
                     "Failed to check for existing artifact version v{}: {}",
                     version_info.version, e
                 ),
+            })?;
+
+        // If artifact version exists, return its PRN
+        if let Some(response) = get_result {
+            eprintln!("Found existing artifact version: v{}", version_info.version);
+            return Ok(response.artifact_version.prn);
+        }
+
+        // Artifact version doesn't exist, create it
+        let create_params = CreateArtifactVersionParams {
+            artifact_prn: artifact_prn.to_string(),
+            custom_metadata: None,
+            description: version_info.description.clone(),
+            id: Some(version_id.to_string()),
+            version: version_info.version.clone(),
+        };
+
+        let create_result = api
+            .artifact_versions()
+            .create(create_params)
+            .await
+            .context(ApiSnafu)?;
+
+        match create_result {
+            Some(response) => {
+                eprintln!("Created new artifact version: v{}", version_info.version);
+                Ok(response.artifact_version.prn)
+            }
+            None => Err(Error::Generic {
+                error: "No response from artifact version creation".to_string(),
             }),
         }
     }
@@ -519,161 +606,21 @@ impl PushCommand {
         binary_id: &str,
         manifest_item: &ManifestItem,
         binary_info: &BinaryInfo,
-        binary_files: &HashMap<String, Vec<u8>>,
+        binary_content: &[u8],
     ) -> Result<String, Error> {
-        // Find the binary content by matching the hash or by binary_id filename
-        let binary_content = binary_files
-            .values()
-            .find(|content| {
-                let mut hasher = sha2::Sha256::new();
-                hasher.update(content);
-                let hash = format!("{:x}", hasher.finalize());
-                hash == manifest_item.hash
-            })
-            .or_else(|| {
-                // Fallback: try to find by binary_id as filename
-                binary_files.get(binary_id)
-            })
-            .or_else(|| {
-                // Another fallback: try to find the first non-bundle.json file
-                binary_files
-                    .iter()
-                    .find(|(name, _)| !name.ends_with("bundle.json"))
-                    .map(|(_, content)| content)
-            })
-            .ok_or_else(|| Error::Generic {
-                error: format!(
-                    "Binary content not found for binary_id {} with hash {}. Available files: {}",
-                    binary_id,
-                    manifest_item.hash,
-                    binary_files
-                        .keys()
-                        .map(|k| k.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
-            })?;
+        // Hash verification was already done in stream_process_binaries, so skip it here
 
-        // Use PRN utilities to construct binary PRN from version PRN
-        let prn_builder = PRNBuilder::from_prn(version_prn).map_err(|e| Error::Generic {
-            error: format!("Failed to parse version PRN {}: {}", version_prn, e),
-        })?;
-
-        let binary_prn = prn_builder.binary(binary_id).map_err(|e| Error::Generic {
-            error: format!("Failed to construct binary PRN: {}", e),
-        })?;
+        let binary_prn = self.construct_binary_prn(version_prn, binary_id)?;
 
         // Try to get existing binary directly
         let get_params = GetBinaryParams { prn: binary_prn };
 
-        match api.binaries().get(get_params).await.context(ApiSnafu)? {
-            Some(GetBinaryResponse { binary }) => {
-                // Validate that the existing binary has the expected hash
-                match &binary.hash {
-                    Some(existing_hash) => {
-                        if existing_hash != &manifest_item.hash {
-                            eprintln!(
-                                "Found binary with id {} but hash mismatch. Expected: {}, Found: {}. Creating new binary.",
-                                binary_id, manifest_item.hash, existing_hash
-                            );
-                            return self
-                                .create_new_binary(
-                                    api,
-                                    version_prn,
-                                    binary_id,
-                                    manifest_item,
-                                    binary_info,
-                                    binary_content,
-                                )
-                                .await;
-                        }
-                    }
-                    None => {
-                        eprintln!(
-                            "Found binary with id {} but it has no hash. This may be an incomplete binary. Creating new binary.",
-                            binary_id
-                        );
-                        return self
-                            .create_new_binary(
-                                api,
-                                version_prn,
-                                binary_id,
-                                manifest_item,
-                                binary_info,
-                                binary_content,
-                            )
-                            .await;
-                    }
-                }
+        let get_result = api.binaries().get(get_params).await.context(ApiSnafu)?;
 
-                // Check binary state and handle accordingly
-                match binary.state {
-                    BinaryState::Signed => {
-                        eprintln!("Found existing signed binary with id: {}", binary_id);
-                        Ok(binary.prn)
-                    }
-                    BinaryState::Signable => {
-                        eprintln!(
-                            "Found existing binary with id {} in state {:?}. Using existing binary instead of creating new one.",
-                            binary_id, binary.state
-                        );
-                        Ok(binary.prn)
-                    }
-                    BinaryState::Uploadable | BinaryState::Hashable | BinaryState::Hashing => {
-                        eprintln!(
-                            "Found existing binary with id {} in state {:?}. Processing through state transitions.",
-                            binary_id, binary.state
-                        );
-
-                        // Convert bundle signatures to BinaryProcessor format
-                        let signatures: Vec<SignatureConfig> = binary_info
-                            .signatures
-                            .iter()
-                            .map(|sig_info| {
-                                SignatureConfig::pre_computed(
-                                    sig_info.keyid.clone(),
-                                    sig_info.sig.clone(),
-                                )
-                            })
-                            .collect();
-
-                        let config = BinaryProcessorConfig {
-                            binary_part_size: self.binary_part_size,
-                            concurrency: self.concurrency,
-                            global_options: self.global_options.clone().unwrap(),
-                            binary_content_hash: Some(manifest_item.hash.clone()),
-                            content_path: None, // Bundles work with in-memory content
-                            signatures,
-                        };
-
-                        let processor = BinaryProcessor::new(config);
-                        let processed_binary = processor
-                            .process_binary(&binary, api, Some(binary_content))
-                            .await?;
-
-                        Ok(processed_binary.prn)
-                    }
-                    _ => {
-                        eprintln!(
-                            "Found binary with id {} but it's in state {:?} which is not processable. Creating new binary.",
-                            binary_id, binary.state
-                        );
-                        self.create_new_binary(
-                            api,
-                            version_prn,
-                            binary_id,
-                            manifest_item,
-                            binary_info,
-                            binary_content,
-                        )
-                        .await
-                    }
-                }
-            }
-            None => {
-                // No binary exists with this id, create it
-                eprintln!("No binary found with id {}, creating new binary", binary_id);
-                self.create_new_binary(
+        // If binary doesn't exist, create it
+        let Some(GetBinaryResponse { binary }) = get_result else {
+            return self
+                .create_new_binary(
                     api,
                     version_prn,
                     binary_id,
@@ -681,9 +628,26 @@ impl PushCommand {
                     binary_info,
                     binary_content,
                 )
-                .await
-            }
+                .await;
+        };
+
+        // Binary exists - validate hash
+        if !self.is_binary_hash_valid(&binary, manifest_item, binary_id) {
+            return self
+                .create_new_binary(
+                    api,
+                    version_prn,
+                    binary_id,
+                    manifest_item,
+                    binary_info,
+                    binary_content,
+                )
+                .await;
         }
+
+        // Binary exists and hash is valid - handle based on state
+        self.handle_existing_binary(&binary, binary_info, manifest_item, binary_content, api)
+            .await
     }
 
     async fn create_new_binary(
@@ -705,7 +669,7 @@ impl PushCommand {
             description: binary_info.description.clone(),
             hash: manifest_item.hash.clone(),
             id: Some(binary_id.to_string()),
-            size: manifest_item.length,
+            size: manifest_item.size,
             target: manifest_item.target.clone(),
         };
 
@@ -797,5 +761,126 @@ impl PushCommand {
                 error: format!("Failed to create bundle: {}", e),
             }),
         }
+    }
+
+    fn construct_binary_prn(&self, version_prn: &str, binary_id: &str) -> Result<String, Error> {
+        let prn_builder = PRNBuilder::from_prn(version_prn).map_err(|e| Error::Generic {
+            error: format!("Failed to parse version PRN {}: {}", version_prn, e),
+        })?;
+
+        prn_builder.binary(binary_id).map_err(|e| Error::Generic {
+            error: format!("Failed to construct binary PRN: {}", e),
+        })
+    }
+
+    fn is_binary_hash_valid(
+        &self,
+        binary: &Binary,
+        manifest_item: &ManifestItem,
+        binary_id: &str,
+    ) -> bool {
+        match &binary.hash {
+            Some(existing_hash) => {
+                if existing_hash != &manifest_item.hash {
+                    eprintln!(
+                        "Found binary with binary_id {} but hash mismatch. Expected: {}, Found: {}. Creating new binary.",
+                        binary_id, manifest_item.hash, existing_hash
+                    );
+                    false
+                } else {
+                    true
+                }
+            }
+            None => {
+                eprintln!(
+                    "Found binary with binary_id {} but it has no hash. This may be an incomplete binary. Creating new binary.",
+                    binary_id
+                );
+                false
+            }
+        }
+    }
+
+    async fn handle_existing_binary(
+        &self,
+        binary: &Binary,
+        binary_info: &BinaryInfo,
+        manifest_item: &ManifestItem,
+        binary_content: &[u8],
+        api: &Api,
+    ) -> Result<String, Error> {
+        match binary.state {
+            BinaryState::Uploadable | BinaryState::Hashable | BinaryState::Hashing => {
+                eprintln!(
+                    "Found existing binary with PRN {} in state {:?}. Processing through state transitions.",
+                    binary.prn,
+                    binary.state
+                );
+
+                self.process_binary_with_signatures(
+                    binary,
+                    binary_info,
+                    manifest_item,
+                    binary_content,
+                    api,
+                )
+                .await
+            }
+            BinaryState::Signable | BinaryState::Signed => {
+                eprintln!(
+                    "Found existing binary with PRN {} in state {:?}. Using existing binary instead of creating new one.",
+                    binary.prn,
+                    binary.state
+                );
+                Ok(binary.prn.clone())
+            }
+            _ => {
+                eprintln!(
+                    "Found binary with PRN {} but it's in state {:?} which is not processable. Creating new binary.",
+                    binary.prn,
+                    binary.state
+                );
+                Err(Error::Generic {
+                    error: format!(
+                        "Binary in unsupported state {:?} for processing",
+                        binary.state
+                    ),
+                })
+            }
+        }
+    }
+
+    async fn process_binary_with_signatures(
+        &self,
+        binary: &Binary,
+        binary_info: &BinaryInfo,
+        manifest_item: &ManifestItem,
+        binary_content: &[u8],
+        api: &Api,
+    ) -> Result<String, Error> {
+        // Convert bundle signatures to BinaryProcessor format
+        let signatures: Vec<SignatureConfig> = binary_info
+            .signatures
+            .iter()
+            .map(|sig_info| {
+                SignatureConfig::pre_computed(sig_info.keyid.clone(), sig_info.sig.clone())
+            })
+            .collect();
+
+        let config = BinaryProcessorConfig {
+            binary_part_size: self.binary_part_size,
+            concurrency: self.concurrency,
+            global_options: self.global_options.clone().unwrap(),
+            binary_content_hash: Some(manifest_item.hash.clone()),
+            content_path: None, // Bundles work with in-memory content
+            signatures,
+        };
+
+        let processor = BinaryProcessor::new(config);
+        let processed_binary = processor
+            .process_binary(binary, api, Some(binary_content))
+            .await?;
+
+        Ok(processed_binary.prn)
     }
 }
