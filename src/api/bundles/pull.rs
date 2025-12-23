@@ -1,4 +1,5 @@
 use crate::api::Command;
+use crate::utils::peridio_resource_names::Prn;
 use crate::utils::{PRNType, PRNValueParser};
 use crate::{ApiSnafu, Error, GlobalOptions};
 use clap::Parser;
@@ -8,63 +9,18 @@ use peridio_sdk::api::binaries::GetBinaryParams;
 
 use peridio_sdk::api::bundles::{Bundle, GetBundleParams};
 use peridio_sdk::api::Api;
-use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::Map;
 use snafu::ResultExt;
-use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct BundleJson {
-    pub artifacts: HashMap<String, ArtifactInfo>,
-    pub bundle: BundleInfo,
-}
+// Import shared bundle format structs
+use super::{
+    ArtifactInfo, ArtifactVersionInfo, BinaryInfo, BundleInfo, BundleJson, ManifestItem,
+    SignatureInfo,
+};
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ArtifactInfo {
-    pub name: String,
-    pub description: Option<String>,
-    pub versions: HashMap<String, ArtifactVersionInfo>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ArtifactVersionInfo {
-    pub version: String,
-    pub description: Option<String>,
-    pub binaries: HashMap<String, BinaryInfo>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct BinaryInfo {
-    pub description: Option<String>,
-    pub signatures: Vec<SignatureInfo>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct SignatureInfo {
-    pub keyid: String,
-    pub sig: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct BundleInfo {
-    pub id: String,
-    pub name: Option<String>,
-    pub signatures: Vec<SignatureInfo>,
-    pub manifest: Vec<ManifestItem>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ManifestItem {
-    pub hash: String,
-    pub size: u64,
-    pub binary_id: String,
-    pub target: String,
-    pub artifact_version_id: String,
-    pub artifact_id: String,
-    pub custom_metadata: Map<String, Value>,
-}
+use std::collections::HashMap;
 
 #[derive(Parser, Debug)]
 pub struct PullCommand {
@@ -80,8 +36,21 @@ pub struct PullCommand {
     output: Option<PathBuf>,
 }
 
+/// Extract the resource ID from a PRN
+fn extract_id_from_prn(prn: &str) -> Result<String, Error> {
+    let parsed = Prn::parse(prn).map_err(|e| Error::Generic {
+        error: format!("Failed to parse PRN {}: {}", prn, e),
+    })?;
+    Ok(parsed.resource_id)
+}
+
 impl Command<PullCommand> {
     pub async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+        // Ensure we use API version 2 for bundle calls since we need the bundle hash field.
+        // API v1 bundles don't include bundle hash information which is required
+        // for proper bundle manifest generation and content verification.
+        let mut global_options = global_options;
+        global_options.api_version = Some(2);
         let api = Api::from(global_options);
 
         // Fetch bundle details
@@ -138,7 +107,7 @@ impl PullCommand {
             })
             .collect::<String>();
 
-        Ok(PathBuf::from(format!("{}.bundle", safe_filename)))
+        Ok(PathBuf::from(format!("{}.cpio.zst", safe_filename)))
     }
 
     async fn build_bundle_json(&self, api: &Api, bundle: &Bundle) -> Result<BundleJson, Error> {
@@ -154,6 +123,7 @@ impl PullCommand {
 
         let mut artifacts: HashMap<String, ArtifactInfo> = HashMap::new();
         let mut manifest: Vec<ManifestItem> = Vec::new();
+        let mut binary_prn_map: HashMap<String, String> = HashMap::new(); // binary_id -> binary_prn
 
         // Process each binary in the bundle to build the manifest and artifacts structure
         for bundle_binary in &bundle_v2.binaries {
@@ -219,24 +189,27 @@ impl PullCommand {
             };
 
             // Create manifest item
+            let binary_id = extract_id_from_prn(&binary.prn)?;
             let manifest_item = ManifestItem {
                 hash: binary.hash.clone().unwrap_or_default(),
                 size: binary.size.unwrap_or(0),
-                binary_id: binary.prn.clone(),
+                binary_id: binary_id.clone(),
                 target: binary.target.clone(),
-                artifact_version_id: binary.artifact_version_prn.clone(),
-                artifact_id: artifact_version.artifact_prn.clone(),
+                artifact_version_id: extract_id_from_prn(&artifact_version.prn)?,
+                artifact_id: extract_id_from_prn(&artifact.prn)?,
                 custom_metadata: bundle_binary
                     .custom_metadata
                     .clone()
                     .unwrap_or_else(|| Map::new()),
             };
 
+            // Store the PRN mapping for later use in downloads
+            binary_prn_map.insert(binary_id, binary.prn.clone());
             manifest.push(manifest_item);
 
             // Add to artifacts structure
             let artifact_info = artifacts
-                .entry(artifact_version.artifact_prn.clone())
+                .entry(extract_id_from_prn(&artifact.prn)?)
                 .or_insert_with(|| ArtifactInfo {
                     name: artifact.name.clone(),
                     description: artifact.description.clone(),
@@ -245,7 +218,7 @@ impl PullCommand {
 
             let version_info = artifact_info
                 .versions
-                .entry(artifact_version.version.clone())
+                .entry(extract_id_from_prn(&artifact_version.prn)?)
                 .or_insert_with(|| ArtifactVersionInfo {
                     version: artifact_version.version.clone(),
                     description: artifact_version.description.clone(),
@@ -254,7 +227,7 @@ impl PullCommand {
 
             version_info
                 .binaries
-                .insert(binary.prn.clone(), binary_info);
+                .insert(extract_id_from_prn(&binary.prn)?, binary_info);
         }
 
         // Bundle signatures need to be fetched separately using bundle_signatures API
@@ -264,16 +237,27 @@ impl PullCommand {
 
         // Build the bundle info
         let bundle_info = BundleInfo {
-            id: bundle_v2.prn.clone(),
+            id: extract_id_from_prn(&bundle_v2.prn)?,
             name: bundle_v2.name.clone(),
+            hash: bundle_v2.hash.clone(),
             signatures: bundle_sigs,
             manifest,
         };
 
-        Ok(BundleJson {
+        let result = BundleJson {
             artifacts,
             bundle: bundle_info,
-        })
+        };
+
+        // Debug: Print the bundle.json structure
+        eprintln!("DEBUG: Generated bundle.json:");
+        eprintln!(
+            "{}",
+            serde_json::to_string_pretty(&result)
+                .unwrap_or_else(|e| format!("Failed to serialize bundle.json: {}", e))
+        );
+
+        Ok(result)
     }
 
     async fn create_bundle_archive(
@@ -282,6 +266,45 @@ impl PullCommand {
         bundle_json: &BundleJson,
         output_path: &PathBuf,
     ) -> Result<(), Error> {
+        // First, we need to rebuild the PRN mapping by re-fetching bundle details
+        // This is necessary because we only store IDs in the bundle format
+        let bundle_response = api
+            .bundles()
+            .get(GetBundleParams {
+                prn: self.bundle_prn.clone(),
+            })
+            .await
+            .context(ApiSnafu)?
+            .ok_or_else(|| Error::Generic {
+                error: "Bundle not found during archive creation".to_string(),
+            })?;
+
+        let bundle_v2 = match &bundle_response.bundle {
+            Bundle::V2(bundle_v2) => bundle_v2,
+            _ => {
+                return Err(Error::Generic {
+                    error: "Expected V2 bundle".to_string(),
+                });
+            }
+        };
+
+        // Build binary_id to PRN mapping
+        let mut binary_prn_map: HashMap<String, String> = HashMap::new();
+        for bundle_binary in &bundle_v2.binaries {
+            let binary_response = api
+                .binaries()
+                .get(GetBinaryParams {
+                    prn: bundle_binary.prn.clone(),
+                })
+                .await
+                .context(ApiSnafu)?
+                .ok_or_else(|| Error::Generic {
+                    error: format!("Binary {} not found", bundle_binary.prn),
+                })?;
+
+            let binary_id = extract_id_from_prn(&binary_response.binary.prn)?;
+            binary_prn_map.insert(binary_id, binary_response.binary.prn.clone());
+        }
         // Create output file and zstd encoder directly
         let output_file = std::fs::File::create(output_path).map_err(|e| Error::Generic {
             error: format!(
@@ -325,11 +348,18 @@ impl PullCommand {
                 manifest_item.target
             );
 
-            // Get binary details for download URL
+            // Get the PRN for this binary_id
+            let binary_prn = binary_prn_map
+                .get(&manifest_item.binary_id)
+                .ok_or_else(|| Error::Generic {
+                    error: format!("PRN not found for binary_id: {}", manifest_item.binary_id),
+                })?;
+
+            // Get binary details for download URL using the stored PRN
             let binary_response = api
                 .binaries()
                 .get(GetBinaryParams {
-                    prn: manifest_item.binary_id.clone(),
+                    prn: binary_prn.clone(),
                 })
                 .await
                 .context(ApiSnafu)?

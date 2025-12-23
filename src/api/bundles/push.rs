@@ -13,14 +13,14 @@ use peridio_sdk::api::binaries::{
     Binary, BinaryState, CreateBinaryParams, CreateBinaryResponse, GetBinaryParams,
     GetBinaryResponse,
 };
+use peridio_sdk::api::bundle_signatures::CreateBundleSignatureParams;
 use peridio_sdk::api::bundles::{
-    Bundle, CreateBundleBinary, CreateBundleParams, CreateBundleParamsV2,
+    Bundle, CreateBundleBinary, CreateBundleParams, CreateBundleParamsV2, GetBundleParams,
 };
 use peridio_sdk::api::Api;
 
 use console::style;
-use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+
 use sha2::Digest;
 use snafu::ResultExt;
 use std::collections::HashMap;
@@ -30,56 +30,8 @@ use std::time::Duration;
 use tokio::time::sleep;
 
 // Bundle JSON structure definitions
-#[derive(Debug, Deserialize, Serialize)]
-pub struct BundleJson {
-    pub artifacts: HashMap<String, ArtifactInfo>,
-    pub bundle: BundleInfo,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ArtifactInfo {
-    pub name: String,
-    pub description: Option<String>,
-    pub versions: HashMap<String, ArtifactVersionInfo>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ArtifactVersionInfo {
-    pub version: String,
-    pub description: Option<String>,
-    pub binaries: HashMap<String, BinaryInfo>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct BinaryInfo {
-    pub description: Option<String>,
-    pub signatures: Vec<SignatureInfo>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct SignatureInfo {
-    pub keyid: String,
-    pub sig: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct BundleInfo {
-    pub id: String,
-    pub name: Option<String>,
-    pub signatures: Vec<SignatureInfo>,
-    pub manifest: Vec<ManifestItem>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ManifestItem {
-    pub hash: String,
-    pub size: u64,
-    pub binary_id: String,
-    pub target: String,
-    pub artifact_version_id: String,
-    pub artifact_id: String,
-    pub custom_metadata: Map<String, Value>,
-}
+// Import shared bundle format structs
+use super::{ArtifactInfo, ArtifactVersionInfo, BinaryInfo, BundleJson, ManifestItem};
 
 #[derive(Parser, Debug)]
 pub struct PushCommand {
@@ -147,6 +99,15 @@ impl PushCommand {
             bundle_json.artifacts.len()
         );
 
+        // Check if bundle already exists with same hash
+        let should_continue = self
+            .check_bundle_exists(api, &bundle_json, organization_prn)
+            .await?;
+
+        if !should_continue {
+            return Ok(()); // Bundle already exists, skip processing
+        }
+
         // Create artifacts and versions first
         let binary_info_map = self
             .create_artifacts_and_versions(api, &bundle_json, organization_prn)
@@ -160,7 +121,7 @@ impl PushCommand {
         eprintln!("Pushing bundle...");
 
         // Create the bundle
-        let _bundle_prn = self
+        let bundle_prn = self
             .create_bundle(api, &bundle_json, &final_created_binaries, organization_prn)
             .await?;
 
@@ -972,5 +933,76 @@ impl PushCommand {
             .await?;
 
         Ok(processed_binary.prn)
+    }
+
+    async fn check_bundle_exists(
+        &self,
+        api: &Api,
+        bundle_json: &BundleJson,
+        organization_prn: &str,
+    ) -> Result<bool, Error> {
+        // Extract organization ID from organization PRN
+        let org_id = organization_prn
+            .split(':')
+            .nth(2)
+            .ok_or_else(|| Error::Generic {
+                error: "Invalid organization PRN format".to_string(),
+            })?;
+
+        let bundle_prn = PRNBuilder::new(org_id.to_string())
+            .bundle(&bundle_json.bundle.id)
+            .map_err(|e| Error::Generic {
+                error: format!("Failed to build bundle PRN: {}", e),
+            })?;
+
+        let params = GetBundleParams { prn: bundle_prn };
+
+        match api.bundles().get(params).await {
+            Ok(response) => match response {
+                Some(response) => {
+                    let local_hash = &bundle_json.bundle.hash;
+
+                    // Only support v2 bundles for hash comparison
+                    match &response.bundle {
+                        Bundle::V2(existing_bundle) => {
+                            let remote_hash = &existing_bundle.hash;
+
+                            if remote_hash == local_hash {
+                                eprintln!("Bundle already exists with the same content. Skipping.");
+                                return Ok(false); // Don't continue processing
+                            } else {
+                                return Err(Error::Generic {
+                                    error: format!(
+                                        "Bundle already exists but with different hash. Local hash: {}, Remote hash: {}",
+                                        local_hash, remote_hash
+                                    ),
+                                });
+                            }
+                        }
+                        Bundle::V1(_) => {
+                            return Err(Error::Generic {
+                                error: "Bundle existence check is only supported for v2 bundles"
+                                    .to_string(),
+                            });
+                        }
+                    }
+                }
+                None => {
+                    // Bundle doesn't exist, continue with creation
+                    eprintln!("Bundle does not exist, proceeding with creation...");
+                    Ok(true) // Continue processing
+                }
+            },
+            Err(e) => {
+                // Check if it's a 404 error (bundle doesn't exist)
+                if e.to_string().contains("404") {
+                    eprintln!("Bundle does not exist, proceeding with creation...");
+                    Ok(true) // Continue processing
+                } else {
+                    // Some other error occurred
+                    Err(Error::Api { source: e })
+                }
+            }
+        }
     }
 }

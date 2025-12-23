@@ -16,11 +16,66 @@ use peridio_sdk::api::bundles::{
 };
 use peridio_sdk::api::Api;
 use peridio_sdk::list_params::ListParams;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use snafu::ResultExt;
+use std::collections::HashMap;
 
 pub use pull::PullCommand;
 pub use push::PushCommand;
+
+// Shared bundle format structs used by both push and pull operations
+#[derive(Debug, Deserialize, Serialize)]
+pub struct BundleJson {
+    pub artifacts: HashMap<String, ArtifactInfo>,
+    pub bundle: BundleInfo,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ArtifactInfo {
+    pub name: String,
+    pub description: Option<String>,
+    pub versions: HashMap<String, ArtifactVersionInfo>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ArtifactVersionInfo {
+    pub version: String,
+    pub description: Option<String>,
+    pub binaries: HashMap<String, BinaryInfo>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct BinaryInfo {
+    pub description: Option<String>,
+    pub signatures: Vec<SignatureInfo>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct SignatureInfo {
+    pub keyid: String,
+    pub sig: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct BundleInfo {
+    pub id: String,
+    pub name: Option<String>,
+    pub hash: String,
+    pub signatures: Vec<SignatureInfo>,
+    pub manifest: Vec<ManifestItem>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ManifestItem {
+    pub hash: String,
+    pub size: u64,
+    pub binary_id: String,
+    pub target: String,
+    pub artifact_version_id: String,
+    pub artifact_id: String,
+    pub custom_metadata: Map<String, Value>,
+}
 
 // Trait to add helper methods to Bundle enum
 trait BundleExt {
