@@ -11,9 +11,12 @@ name = "peridio"
 path = "src/main.rs"
 
 [dependencies]
-peridio-sdk = { git = "https://github.com/peridio/peridio-rust.git", tag = "1.3.0" }
+# peridio-sdk = { git = "https://github.com/peridio/peridio-rust.git", tag = "1.3.0" }
+peridio-sdk = { git = "https://github.com/peridio/peridio-rust.git", branch = "jwong-eng-1137" }
 serde_json = "1.0.125"
 snafu = "0.8.4"
+log = "0.4"
+env_logger = "0.10"
 tokio = { version = "1.39.3", features = ["full"] }
 tower = { version = "0.5.0" }
 directories = "5.0.1"

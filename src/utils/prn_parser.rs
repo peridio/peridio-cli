@@ -127,6 +127,11 @@ impl PRNBuilder {
         self.build_prn("artifact_version", version_id)
     }
 
+    /// Build a bundle PRN
+    pub fn bundle(&self, bundle_id: &str) -> Result<String, PRNError> {
+        self.build_prn("bundle", bundle_id)
+    }
+
     /// Build a generic PRN with the specified resource type and ID
     pub fn build_prn(&self, resource_type: &str, resource_id: &str) -> Result<String, PRNError> {
         // Validate organization_id is a valid UUID

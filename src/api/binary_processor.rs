@@ -222,17 +222,13 @@ impl BinaryProcessor {
                     if matches!(binary.state, BinaryState::Signable) {
                         Ok(binary)
                     } else {
-                        Err(Error::Api {
-                            source: peridio_sdk::api::Error::Unknown {
-                                error: "Binary not yet signable".to_string(),
-                            },
+                        Err(Error::Generic {
+                            error: "Binary not yet signable".to_string(),
                         })
                     }
                 }
-                None => Err(Error::Api {
-                    source: peridio_sdk::api::Error::Unknown {
-                        error: "Binary not found during state check".to_string(),
-                    },
+                None => Err(Error::Generic {
+                    error: "Binary not found during state check".to_string(),
                 }),
             }
         })

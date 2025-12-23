@@ -1,3 +1,4 @@
+mod pull;
 mod push;
 
 use super::Command;
@@ -18,6 +19,7 @@ use peridio_sdk::list_params::ListParams;
 use serde_json::{Map, Value};
 use snafu::ResultExt;
 
+pub use pull::PullCommand;
 pub use push::PushCommand;
 
 // Trait to add helper methods to Bundle enum
@@ -64,6 +66,7 @@ fn create_bundle_params_v2(
 pub enum BundlesCommand {
     Create(Command<CreateCommand>),
     Push(Command<PushCommand>),
+    Pull(Command<PullCommand>),
     List(Command<ListCommand>),
     Get(Command<GetCommand>),
     Update(Command<UpdateCommand>),
@@ -75,6 +78,7 @@ impl BundlesCommand {
         match self {
             Self::Create(cmd) => cmd.run(global_options).await,
             Self::Push(cmd) => cmd.run(global_options).await,
+            Self::Pull(cmd) => cmd.run(global_options).await,
             Self::List(cmd) => cmd.run(global_options).await,
             Self::Get(cmd) => cmd.run(global_options).await,
             Self::Update(cmd) => cmd.run(global_options).await,

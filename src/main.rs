@@ -11,6 +11,7 @@ use std::{
 
 use clap::Parser;
 use config::Config;
+use log;
 use peridio_sdk::api::ApiOptions;
 use peridio_sdk::Api;
 use snafu::Snafu;
@@ -103,6 +104,9 @@ pub struct GlobalOptions {
     )]
     config_directory: Option<String>,
 
+    #[arg(long, help = "Enable debug logging")]
+    verbose: bool,
+
     #[clap(skip)]
     signing_key_pairs: Option<SigningKeyPairsV2>,
 
@@ -190,7 +194,23 @@ enum Command {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    match Program::parse().run().await {
+    let program = Program::parse();
+
+    // Initialize env_logger based on verbose flag
+    let log_level = if program.global_options.verbose {
+        log::LevelFilter::Debug
+    } else {
+        log::LevelFilter::Info
+    };
+
+    env_logger::Builder::from_default_env()
+        .filter_level(log_level)
+        .try_init()
+        .unwrap_or_else(|_| {
+            // Logger already initialized, ignore the error
+        });
+
+    match program.run().await {
         Err(error) => {
             match error {
                 Error::Api { source } => {
