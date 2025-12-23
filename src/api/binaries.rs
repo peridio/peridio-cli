@@ -1,3 +1,5 @@
+use super::binary_processor::{BinaryProcessor, BinaryProcessorConfig, SignatureConfig};
+
 use super::Command;
 use crate::print_json;
 use crate::utils::list::ListArgs;
@@ -8,16 +10,9 @@ use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
 use crate::NonExistingPathSnafu;
-use backon::ConstantBuilder;
-use backon::Retryable;
-use base64::engine::general_purpose;
-use base64::Engine;
+
 use clap::Parser;
-use futures_util::stream;
-use futures_util::StreamExt;
-use indicatif::ProgressBar;
-use indicatif::ProgressState;
-use indicatif::ProgressStyle;
+
 use peridio_sdk::api::artifact_versions::ArtifactVersion;
 use peridio_sdk::api::artifact_versions::GetArtifactVersionParams;
 use peridio_sdk::api::artifact_versions::GetArtifactVersionResponse;
@@ -35,8 +30,7 @@ use peridio_sdk::api::binaries::ListBinariesParams;
 use peridio_sdk::api::binaries::ListBinariesResponse;
 use peridio_sdk::api::binaries::UpdateBinaryParams;
 use peridio_sdk::api::binaries::UpdateBinaryResponse;
-use peridio_sdk::api::binary_parts::BinaryPartState;
-use peridio_sdk::api::binary_parts::ListBinaryPart;
+
 use peridio_sdk::api::bundle_overrides::AddDeviceParams;
 use peridio_sdk::api::bundle_overrides::BundleOverride;
 use peridio_sdk::api::bundle_overrides::CreateBundleOverrideParams;
@@ -100,16 +94,13 @@ use peridio_sdk::api::releases::CreateReleaseParams;
 use peridio_sdk::api::releases::Release;
 use peridio_sdk::api::Api;
 use peridio_sdk::list_params::ListParams;
-use reqwest::Body;
-use reqwest::Client;
+
 use sha2::{Digest, Sha256};
 use snafu::ResultExt;
 use std::cmp;
-use std::io::Read;
-use std::io::Seek;
-use std::sync::Arc;
+
 use std::thread::available_parallelism;
-use std::time::Duration;
+
 use std::{fs, io};
 use time::OffsetDateTime;
 
@@ -214,34 +205,37 @@ pub struct CreateCommand {
     #[arg(long, requires = "content_path")]
     concurrency: Option<u8>,
 
-    /// The name of a signing key pair in your Peridio CLI config. This will dictate both the private key to create a binary signature with as well as the signing key Peridio will use to verify the binary signature.
+    /// The name(s) of signing key pair(s) in your Peridio CLI config. This will dictate both the private key to create a binary signature with as well as the signing key Peridio will use to verify the binary signature. Multiple pairs can be specified for multiple signatures.
     #[arg(
         long,
         short = 's',
         conflicts_with = "signing_key_private",
         conflicts_with = "signing_key_prn",
         required_unless_present_any = ["signing_key_private", "signing_key_prn", "skip_upload"],
+        action = clap::ArgAction::Append
     )]
-    signing_key_pair: Option<String>,
+    signing_key_pair: Vec<String>,
 
-    /// A path to a PKCS#8 private key encoded as a pem to create a binary signature binary with.
+    /// Path(s) to PKCS#8 private key(s) encoded as pem to create binary signature(s) with. Multiple keys can be specified for multiple signatures.
     #[arg(
         long,
         conflicts_with = "signing_key_pair",
         required_unless_present_any = ["signing_key_pair", "skip_upload"],
-        requires = "signing_key_prn"
+        requires = "signing_key_prn",
+        action = clap::ArgAction::Append
     )]
-    signing_key_private: Option<String>,
+    signing_key_private: Vec<String>,
 
-    /// The PRN of the signing key Peridio will use to verify the binary signature.
+    /// The PRN(s) of the signing key(s) Peridio will use to verify the binary signature(s). Must match the number of private keys provided.
     #[arg(
         long,
         conflicts_with = "signing_key_pair",
         required_unless_present_any = ["signing_key_pair", "skip_upload"],
         requires = "signing_key_private",
-        value_parser = PRNValueParser::new(PRNType::SigningKey)
+        value_parser = PRNValueParser::new(PRNType::SigningKey),
+        action = clap::ArgAction::Append
     )]
-    signing_key_prn: Option<String>,
+    signing_key_prn: Vec<String>,
 
     /// Create the binary record but do not upload its content nor sign it.
     #[arg(
@@ -298,10 +292,29 @@ pub struct CreateCommand {
 }
 
 impl CreateCommand {
+    /// Validate that private keys and PRNs are properly paired
+    fn validate_private_key_prn_pairing(&self) -> Result<(), Error> {
+        if (!self.signing_key_private.is_empty() || !self.signing_key_prn.is_empty())
+            && self.signing_key_private.len() != self.signing_key_prn.len()
+        {
+            return Err(Error::Generic {
+                error: format!(
+                    "Number of private keys ({}) must match number of PRNs ({})",
+                    self.signing_key_private.len(),
+                    self.signing_key_prn.len()
+                ),
+            });
+        }
+        Ok(())
+    }
+
     async fn run(
         &mut self,
         global_options: GlobalOptions,
     ) -> Result<Option<CreateBinaryCommandResponse>, Error> {
+        // Validate private key and PRN pairing
+        self.validate_private_key_prn_pairing()?;
+
         let api = Api::from(global_options.clone());
         self.global_options = Some(global_options.clone());
 
@@ -325,7 +338,65 @@ impl CreateCommand {
                     );
                 }
 
-                let binary = self.process_binary(&binary, &api).await?;
+                // Read binary content if needed for processing
+                let binary_content = if matches!(binary.state, BinaryState::Uploadable) {
+                    let content_path = self.content_path.clone().ok_or_else(|| Error::Api {
+                        source: peridio_sdk::api::Error::Unknown {
+                            error: "Content path is required for binary upload".to_string(),
+                        },
+                    })?;
+                    Some(fs::read(&content_path).context(NonExistingPathSnafu {
+                        path: &content_path,
+                    })?)
+                } else {
+                    None
+                };
+
+                // Convert all signing configurations to unified SignatureConfig format
+                let mut signatures = Vec::new();
+
+                // Handle multiple signing key pairs
+                if !self.signing_key_pair.is_empty() {
+                    if let Some(signing_key_pairs) = global_options.signing_key_pairs.clone() {
+                        for key_pair_name in &self.signing_key_pair {
+                            if let Some(key_pair) = signing_key_pairs.get(key_pair_name) {
+                                signatures.push(SignatureConfig::from_key_pair(
+                                    key_pair.signing_key_prn.clone(),
+                                    key_pair_name.clone(),
+                                ));
+                            }
+                        }
+                    }
+                }
+
+                // Handle private key + PRN approach (multiple pairs)
+                if !self.signing_key_private.is_empty() && !self.signing_key_prn.is_empty() {
+                    for (private_key, prn) in self
+                        .signing_key_private
+                        .iter()
+                        .zip(self.signing_key_prn.iter())
+                    {
+                        signatures.push(SignatureConfig::from_private_key(
+                            prn.clone(),
+                            private_key.clone(),
+                        ));
+                    }
+                }
+
+                // Create binary processor config
+                let config = BinaryProcessorConfig {
+                    binary_part_size: self.binary_part_size,
+                    concurrency: self.concurrency,
+                    global_options: global_options.clone(),
+                    binary_content_hash: binary.hash.clone(),
+                    content_path: self.content_path.clone(),
+                    signatures,
+                };
+
+                let processor = BinaryProcessor::new(config);
+                let binary = processor
+                    .process_binary(&binary, &api, binary_content.as_deref())
+                    .await?;
 
                 let bundle = if self.bundle_override_prn.is_some()
                     || self.device_prn.is_some()
@@ -692,386 +763,6 @@ impl CreateCommand {
         }
     }
 
-    async fn process_binary(&self, binary: &Binary, api: &Api) -> Result<Binary, Error> {
-        if matches!(binary.state, BinaryState::Uploadable) {
-            let binary = self.process_binary_parts(binary, api).await?;
-
-            // do signing if available
-            if self.signing_key_pair.is_some() || self.signing_key_private.is_some() {
-                // wait for hashing to be signable
-                eprintln!("Waiting for cloud hashing...");
-                let binary = (|| async { self.check_for_state_change(&binary, api).await })
-                    .retry(
-                        &ConstantBuilder::default()
-                            .with_delay(Duration::new(10, 0))
-                            .with_max_times(30),
-                    )
-                    .await?;
-
-                eprintln!("Signing binary...");
-                let binary = self.sign_binary(&binary, api).await?;
-
-                Ok(binary)
-            } else {
-                Ok(binary)
-            }
-        } else if matches!(binary.state, BinaryState::Hashable) {
-            eprintln!("Updating binary to hashing...");
-            // move to hashing
-            let binary = self
-                .change_binary_status(ArgBinaryState::Hashing, binary, api)
-                .await?;
-
-            if self.signing_key_pair.is_some() || self.signing_key_private.is_some() {
-                // wait for hashing to be signable
-                eprintln!("Waiting for cloud hashing...");
-                let binary = (|| async { self.check_for_state_change(&binary, api).await })
-                    .retry(
-                        &ConstantBuilder::default()
-                            .with_delay(Duration::new(10, 0))
-                            .with_max_times(30),
-                    )
-                    .await?;
-
-                eprintln!("Signing binary...");
-                let binary = self.sign_binary(&binary, api).await?;
-
-                Ok(binary)
-            } else {
-                Ok(binary.clone())
-            }
-        } else if matches!(binary.state, BinaryState::Hashing) {
-            if self.signing_key_pair.is_some() || self.signing_key_private.is_some() {
-                // wait for hashing to be signable
-                eprintln!("Waiting for cloud hashing...");
-                let binary = (|| async { self.check_for_state_change(binary, api).await })
-                    .retry(
-                        &ConstantBuilder::default()
-                            .with_delay(Duration::new(10, 0))
-                            .with_max_times(30),
-                    )
-                    .await?;
-
-                eprintln!("Signing binary...");
-                let binary = self.sign_binary(&binary, api).await?;
-
-                Ok(binary)
-            } else {
-                Ok(binary.clone())
-            }
-        } else if matches!(binary.state, BinaryState::Signable) {
-            if self.signing_key_pair.is_some() || self.signing_key_private.is_some() {
-                eprintln!("Signing binary...");
-                let binary = self.sign_binary(binary, api).await?;
-
-                Ok(binary)
-            } else {
-                Ok(binary.clone())
-            }
-        } else {
-            Ok(binary.clone())
-        }
-    }
-
-    async fn sign_binary(&self, binary: &Binary, api: &Api) -> Result<Binary, Error> {
-        let command = crate::api::binary_signatures::CreateCommand {
-            binary_prn: binary.prn.clone(),
-            binary_content_path: self.content_path.clone(),
-            signature: None,
-            signing_key_pair: self.signing_key_pair.clone(),
-            signing_key_private: self.signing_key_private.clone(),
-            signing_key_prn: self.signing_key_prn.clone(),
-            api: Some(api.clone()),
-            binary_content_hash: binary.hash.clone(),
-        };
-
-        match command
-            .run(self.global_options.clone().ok_or_else(|| Error::Api {
-                source: peridio_sdk::api::Error::Unknown {
-                    error: "Global options not available".to_string(),
-                },
-            })?)
-            .await?
-        {
-            Some(_) => {
-                let binary = self
-                    .change_binary_status(ArgBinaryState::Signed, binary, api)
-                    .await?;
-
-                Ok(binary)
-            }
-            None => panic!("Failed signing binary"),
-        }
-    }
-
-    async fn check_for_state_change(&self, binary: &Binary, api: &Api) -> Result<Binary, Error> {
-        let command = GetCommand {
-            prn: binary.prn.clone(),
-            api: Some(api.to_owned()),
-        };
-
-        match command
-            .run(self.global_options.clone().ok_or_else(|| Error::Api {
-                source: peridio_sdk::api::Error::Unknown {
-                    error: "Global options not available".to_string(),
-                },
-            })?)
-            .await?
-        {
-            Some(GetBinaryResponse { binary }) => {
-                if matches!(binary.state, BinaryState::Signable) {
-                    Ok(binary)
-                } else {
-                    Err(Error::Api {
-                        source: peridio_sdk::api::Error::Unknown {
-                            error: "failed at checking binary state changes".to_string(),
-                        },
-                    })
-                }
-            }
-            None => panic!("Cannot get binary to check for state change"),
-        }
-    }
-
-    async fn change_binary_status(
-        &self,
-        state: ArgBinaryState,
-        binary: &Binary,
-        api: &Api,
-    ) -> Result<Binary, Error> {
-        let command = UpdateCommand {
-            prn: binary.prn.clone(),
-            custom_metadata: None,
-            description: None,
-            state: Some(state),
-            api: Some(api.clone()),
-            hash: None,
-            size: None,
-        };
-
-        match command
-            .run(self.global_options.clone().ok_or_else(|| Error::Api {
-                source: peridio_sdk::api::Error::Unknown {
-                    error: "Global options not available".to_string(),
-                },
-            })?)
-            .await?
-        {
-            Some(UpdateBinaryResponse { binary }) => Ok(binary),
-            None => panic!("Cannot update binary state"),
-        }
-    }
-
-    async fn process_binary_parts(&self, binary: &Binary, api: &Api) -> Result<Binary, Error> {
-        eprintln!("Evaluating binary parts...");
-        // get server parts
-        let binary_parts = self.get_binary_parts(binary, api).await?;
-
-        let file_size = {
-            let content_path = self.content_path.clone().ok_or_else(|| Error::Api {
-                source: peridio_sdk::api::Error::Unknown {
-                    error: "Content path is required for binary upload".to_string(),
-                },
-            })?;
-            let file = fs::File::open(&content_path).context(NonExistingPathSnafu {
-                path: &content_path,
-            })?;
-
-            file.metadata()
-                .map_err(|e| Error::Api {
-                    source: peridio_sdk::api::Error::Unknown {
-                        error: format!("Failed to get file metadata for '{content_path}': {e}"),
-                    },
-                })?
-                .len()
-        };
-
-        let binary_part_size = self.binary_part_size.ok_or_else(|| Error::Api {
-            source: peridio_sdk::api::Error::Unknown {
-                error: "Binary part size is required".to_string(),
-            },
-        })?;
-        let chunks_length = (file_size as f64 / binary_part_size as f64).ceil() as u64;
-
-        let client = Client::new();
-
-        self.upload_binary_parts(
-            binary,
-            api,
-            file_size,
-            chunks_length,
-            &client,
-            &binary_parts,
-        )
-        .await?;
-
-        eprintln!("Validating Upload");
-        // list binary parts again in order to get the latest state
-        let binary_parts = self.get_binary_parts(binary, api).await?;
-
-        // if the parts are not equal it means we missed a part
-        // if a binary part state is not valid is because something is missing
-        if !(binary_parts.len() == chunks_length as usize
-            && binary_parts
-                .iter()
-                .all(|x| matches!(x.state, BinaryPartState::Valid)))
-        {
-            // retry only once
-            eprintln!("Retrying Upload");
-            self.upload_binary_parts(
-                binary,
-                api,
-                file_size,
-                chunks_length,
-                &client,
-                &binary_parts,
-            )
-            .await?;
-        }
-
-        eprintln!("Updating binary to hashable...");
-        // we created the binary parts not move it to hashable
-        let binary = self
-            .change_binary_status(ArgBinaryState::Hashable, binary, api)
-            .await?;
-
-        eprintln!("Updating binary to hashing...",);
-        // move to hashing
-        let binary = self
-            .change_binary_status(ArgBinaryState::Hashing, &binary, api)
-            .await?;
-
-        Ok(binary)
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    async fn upload_binary_parts(
-        &self,
-        binary: &Binary,
-        api: &Api,
-        file_size: u64,
-        chunks_length: u64,
-        client: &Client,
-        binary_parts: &[ListBinaryPart],
-    ) -> Result<(), Error> {
-        eprintln!("Creating binary parts and uploading...");
-        let pb = Arc::new(ProgressBar::new(file_size));
-        pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
-            .unwrap()
-            .with_key("eta", |state: &ProgressState, w: &mut dyn std::fmt::Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
-            .progress_chars("#>-"));
-
-        let result = stream::iter(1..=chunks_length)
-            .map(|index| {
-                let client = client.clone();
-                let binary_part_size = self.binary_part_size.unwrap();
-                let global_options = self.global_options.clone().unwrap();
-                let api = api.clone();
-                let binary = binary.clone();
-                let content_path = self.content_path.clone().unwrap();
-                let binary_parts = binary_parts.to_vec();
-                let pb = Arc::clone(&pb);
-                tokio::spawn(async move {
-                    // we ignore the ones we already created
-                    if let Some(binary_part) = binary_parts.iter().find(|x| x.index as u64 == index)
-                    {
-                        if matches!(binary_part.state, BinaryPartState::Valid) {
-                            pb.inc(binary_part.size);
-                            return;
-                        }
-                    }
-
-                    // we want to open the file in each thread, this is due to concurrency issues
-                    // when using `Seek` from different threads theres a race condition in the data
-                    let mut file = fs::File::open(&content_path).unwrap();
-
-                    let file_position = binary_part_size * (index - 1);
-
-                    file.seek(io::SeekFrom::Start(file_position)).unwrap();
-
-                    let mut buffer = vec![0; binary_part_size.try_into().unwrap()];
-
-                    let n = file.read(&mut buffer[..]).unwrap();
-
-                    if n > 0 {
-                        let mut mut_buffer = vec![0; n];
-
-                        mut_buffer.copy_from_slice(&buffer[..n]);
-
-                        let mut hasher = Sha256::new();
-                        let _ = io::copy(&mut &mut_buffer[..], &mut hasher).unwrap();
-                        let hash = hasher.finalize();
-
-                        // push those bytes to the server
-                        let create_command = crate::api::binary_parts::CreateCommand {
-                            binary_prn: binary.prn.clone(),
-                            expected_binary_size: binary.size,
-                            index: index as u16,
-                            hash: format!("{hash:x}"),
-                            api: Some(api),
-                            size: n as u64,
-                            binary_content_path: None,
-                        };
-
-                        let bin_part = create_command
-                            .run(global_options)
-                            .await
-                            .expect("Error while creating a binary part binary part")
-                            .expect("Cannot create a binary part");
-
-                        // do amazon request
-                        let body = Body::from(mut_buffer);
-
-                        let hash_base64 = general_purpose::STANDARD.encode(hash);
-
-                        let res = client
-                            .put(bin_part.binary_part.presigned_upload_url)
-                            .body(body)
-                            .header("x-amz-checksum-sha256", &hash_base64)
-                            .header("content-length", n)
-                            .header("content-type", "application/octet-stream")
-                            .send()
-                            .await
-                            .unwrap();
-
-                        pb.inc(n.try_into().unwrap());
-
-                        if !(200..=201).contains(&res.status().as_u16()) {
-                            panic!("Wasn't able to upload binary to amazon S3")
-                        };
-                    };
-                })
-            })
-            .buffer_unordered(self.concurrency.unwrap().into());
-
-        let _ = result.collect::<Vec<_>>().await;
-
-        pb.finish_and_clear();
-
-        Ok(())
-    }
-
-    async fn get_binary_parts(
-        &self,
-        binary: &Binary,
-        api: &Api,
-    ) -> Result<Vec<ListBinaryPart>, Error> {
-        let list_command = crate::api::binary_parts::ListCommand {
-            binary_prn: binary.prn.clone(),
-            api: Some(api.clone()),
-        };
-
-        let binary_parts = match list_command
-            .run(self.global_options.clone().unwrap())
-            .await?
-        {
-            Some(binary_parts) => binary_parts.binary_parts,
-            None => Vec::new(),
-        };
-
-        Ok(binary_parts)
-    }
-
     async fn get_or_create_binary(&self, api: &Api) -> Result<Option<CreateBinaryResponse>, Error> {
         let (size, hash) = if let Some(content_path) = &self.content_path {
             eprintln!("Hashing binary...");
@@ -1193,9 +884,33 @@ impl CreateCommand {
         size: u64,
         api: &Api,
     ) -> Result<Binary, Error> {
-        let binary = self
-            .change_binary_status(ArgBinaryState::Uploadable, binary, api)
-            .await?;
+        let reset_command = UpdateCommand {
+            prn: binary.prn.clone(),
+            custom_metadata: None,
+            description: None,
+            state: Some(ArgBinaryState::Uploadable),
+            api: Some(api.clone()),
+            hash: None,
+            size: None,
+        };
+
+        let binary = match reset_command
+            .run(self.global_options.clone().ok_or_else(|| Error::Api {
+                source: peridio_sdk::api::Error::Unknown {
+                    error: "Global options not available".to_string(),
+                },
+            })?)
+            .await?
+        {
+            Some(UpdateBinaryResponse { binary }) => binary,
+            None => {
+                return Err(Error::Api {
+                    source: peridio_sdk::api::Error::Unknown {
+                        error: "Failed to reset binary status".to_string(),
+                    },
+                })
+            }
+        };
 
         let update_command = UpdateCommand {
             prn: binary.prn.clone(),

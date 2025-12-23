@@ -1,4 +1,5 @@
 pub mod list;
+pub mod prn;
 pub mod serde_introspection;
 
 use clap::error::{ContextKind, ContextValue, ErrorKind};
@@ -14,15 +15,14 @@ use uuid::Uuid;
 
 use crate::GlobalOptions;
 
+#[derive(Default)]
 pub struct StyledStr {
     messages: Vec<(Option<Style>, String)>,
 }
 
 impl StyledStr {
     pub fn new() -> Self {
-        Self {
-            messages: Vec::new(),
-        }
+        Self::default()
     }
 
     pub fn push_str(&mut self, style: Option<Style>, msg: String) {
@@ -372,6 +372,8 @@ pub fn normalize_path<P: AsRef<Path>>(path: P) -> PathBuf {
 
     normalized
 }
+
+pub use prn::PRNBuilder;
 
 // #[derive(Clone, Debug)]
 // pub enum ExpandResult {

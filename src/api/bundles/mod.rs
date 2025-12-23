@@ -1,3 +1,5 @@
+mod push;
+
 use super::Command;
 use crate::print_json;
 use crate::utils::list::ListArgs;
@@ -15,6 +17,8 @@ use peridio_sdk::api::Api;
 use peridio_sdk::list_params::ListParams;
 use serde_json::{Map, Value};
 use snafu::ResultExt;
+
+pub use push::PushCommand;
 
 // Trait to add helper methods to Bundle enum
 trait BundleExt {
@@ -59,6 +63,7 @@ fn create_bundle_params_v2(
 #[derive(Parser, Debug)]
 pub enum BundlesCommand {
     Create(Command<CreateCommand>),
+    Push(Command<PushCommand>),
     List(Command<ListCommand>),
     Get(Command<GetCommand>),
     Update(Command<UpdateCommand>),
@@ -69,6 +74,7 @@ impl BundlesCommand {
     pub async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
         match self {
             Self::Create(cmd) => cmd.run(global_options).await,
+            Self::Push(cmd) => cmd.run(global_options).await,
             Self::List(cmd) => cmd.run(global_options).await,
             Self::Get(cmd) => cmd.run(global_options).await,
             Self::Update(cmd) => cmd.run(global_options).await,
