@@ -19,12 +19,11 @@ use crate::config::config_v2::{CertificateAuthoritiesV2, SigningKeyPairsV2};
 use crate::utils::{Style, StyledStr};
 
 #[macro_export]
-#[allow(clippy::crate_in_macro_def)]
 macro_rules! print_json {
     ($v:expr) => {
         println!(
             "{}",
-            serde_json::to_string($v).context(crate::JsonSerializationSnafu)?
+            serde_json::to_string($v).context($crate::JsonSerializationSnafu)?
         )
     };
 }

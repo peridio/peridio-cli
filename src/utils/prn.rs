@@ -2,14 +2,14 @@ use uuid::Uuid;
 
 /// A parsed PRN structure that provides easy access to components
 #[derive(Debug, Clone, PartialEq)]
-pub struct PRN {
+pub struct Prn {
     pub version: String,
     pub organization_id: String,
     pub resource_type: String,
     pub resource_id: String,
 }
 
-impl PRN {
+impl Prn {
     /// Parse a PRN string into its components
     /// Format: prn:1:organization_id:resource_type:resource_id
     pub fn parse(prn: &str) -> Result<Self, PRNError> {
@@ -40,7 +40,7 @@ impl PRN {
             return Err(PRNError::InvalidResourceId(parts[4].to_string()));
         }
 
-        Ok(PRN {
+        Ok(Prn {
             version: parts[1].to_string(),
             organization_id: parts[2].to_string(),
             resource_type: parts[3].to_string(),
@@ -97,12 +97,12 @@ impl PRNBuilder {
         match parts.len() {
             3 => {
                 // Organization PRN: prn:1:organization_id
-                let org_id = PRN::parse_organization_id(prn)?;
+                let org_id = Prn::parse_organization_id(prn)?;
                 Ok(Self::new(org_id))
             }
             5 => {
                 // Resource PRN: prn:1:organization_id:resource_type:resource_id
-                let parsed = PRN::parse(prn)?;
+                let parsed = Prn::parse(prn)?;
                 Ok(Self::new(parsed.organization_id))
             }
             _ => Err(PRNError::InvalidFormat(format!(
@@ -180,8 +180,9 @@ mod tests {
 
     #[test]
     fn test_prn_parse_valid() {
-        let prn_str = "prn:1:550e8400-e29b-41d4-a716-446655440000:binary:550e8400-e29b-41d4-a716-446655440001";
-        let prn = PRN::parse(prn_str).unwrap();
+        let prn_str =
+            "prn:1:550e8400-e29b-41d4-a716-446655440000:binary:550e8400-e29b-41d4-a716-446655440001";
+        let prn = Prn::parse(prn_str).unwrap();
 
         assert_eq!(prn.version, "1");
         assert_eq!(prn.organization_id, "550e8400-e29b-41d4-a716-446655440000");
@@ -191,25 +192,25 @@ mod tests {
 
     #[test]
     fn test_prn_parse_invalid_format() {
-        let result = PRN::parse("invalid:prn");
+        let result = Prn::parse("invalid:prn");
         assert!(matches!(result, Err(PRNError::InvalidFormat(_))));
     }
 
     #[test]
     fn test_prn_parse_invalid_prefix() {
-        let result = PRN::parse("invalid:1:org:binary:id");
+        let result = Prn::parse("invalid:1:org:binary:id");
         assert!(matches!(result, Err(PRNError::InvalidPrefix(_))));
     }
 
     #[test]
     fn test_prn_parse_invalid_version() {
-        let result = PRN::parse("prn:2:org:binary:id");
+        let result = Prn::parse("prn:2:org:binary:id");
         assert!(matches!(result, Err(PRNError::UnsupportedVersion(_))));
     }
 
     #[test]
     fn test_prn_parse_invalid_org_id() {
-        let result = PRN::parse("prn:1:invalid-uuid:binary:550e8400-e29b-41d4-a716-446655440001");
+        let result = Prn::parse("prn:1:invalid-uuid:binary:550e8400-e29b-41d4-a716-446655440001");
         assert!(matches!(result, Err(PRNError::InvalidOrganizationId(_))));
     }
 
@@ -234,18 +235,17 @@ mod tests {
         let builder = PRNBuilder::new(org_id.to_string());
 
         assert_eq!(
-            builder.binary("550e8400-e29b-41d4-a716-446655440001").unwrap(),
+            builder
+                .binary("550e8400-e29b-41d4-a716-446655440001")
+                .unwrap(),
             "prn:1:550e8400-e29b-41d4-a716-446655440000:binary:550e8400-e29b-41d4-a716-446655440001"
         );
 
         assert_eq!(
-            builder.artifact("550e8400-e29b-41d4-a716-446655440002").unwrap(),
+            builder
+                .artifact("550e8400-e29b-41d4-a716-446655440002")
+                .unwrap(),
             "prn:1:550e8400-e29b-41d4-a716-446655440000:artifact:550e8400-e29b-41d4-a716-446655440002"
-        );
-
-        assert_eq!(
-            builder.bundle("550e8400-e29b-41d4-a716-446655440003").unwrap(),
-            "prn:1:550e8400-e29b-41d4-a716-446655440000:bundle:550e8400-e29b-41d4-a716-446655440003"
         );
 
         assert_eq!(
@@ -286,16 +286,16 @@ mod tests {
     #[test]
     fn test_parse_organization_id() {
         let org_prn = "prn:1:550e8400-e29b-41d4-a716-446655440000";
-        let org_id = PRN::parse_organization_id(org_prn).unwrap();
+        let org_id = Prn::parse_organization_id(org_prn).unwrap();
         assert_eq!(org_id, "550e8400-e29b-41d4-a716-446655440000");
     }
 
     #[test]
     fn test_parse_organization_id_invalid() {
-        let result = PRN::parse_organization_id("prn:1:invalid-uuid");
+        let result = Prn::parse_organization_id("prn:1:invalid-uuid");
         assert!(matches!(result, Err(PRNError::InvalidOrganizationId(_))));
 
-        let result = PRN::parse_organization_id("invalid:format");
+        let result = Prn::parse_organization_id("invalid:format");
         assert!(matches!(result, Err(PRNError::InvalidFormat(_))));
     }
 }

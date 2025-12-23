@@ -15,15 +15,14 @@ use uuid::Uuid;
 
 use crate::GlobalOptions;
 
+#[derive(Default)]
 pub struct StyledStr {
     messages: Vec<(Option<Style>, String)>,
 }
 
 impl StyledStr {
     pub fn new() -> Self {
-        Self {
-            messages: Vec::new(),
-        }
+        Self::default()
     }
 
     pub fn push_str(&mut self, style: Option<Style>, msg: String) {
