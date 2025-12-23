@@ -164,6 +164,9 @@ impl PushCommand {
             .create_bundle(api, &bundle_json, &final_created_binaries, organization_prn)
             .await?;
 
+        // Sign the bundle if signatures are present
+        self.sign_bundle(api, &bundle_json, &bundle_prn).await?;
+
         eprintln!("Bundle push completed successfully");
         Ok(())
     }
@@ -791,6 +794,43 @@ impl PushCommand {
                 error: format!("Failed to create bundle: {}", e),
             }),
         }
+    }
+
+    async fn sign_bundle(
+        &self,
+        api: &Api,
+        bundle_json: &BundleJson,
+        bundle_prn: &str,
+    ) -> Result<(), Error> {
+        if bundle_json.bundle.signatures.is_empty() {
+            return Ok(());
+        }
+
+        for sig_info in &bundle_json.bundle.signatures {
+            let params = CreateBundleSignatureParams {
+                bundle_prn: bundle_prn.to_string(),
+                signing_key_prn: None,
+                signature: sig_info.sig.clone(),
+                signing_key_keyid: Some(sig_info.keyid.clone()),
+            };
+
+            if api
+                .bundle_signatures()
+                .create(params)
+                .await
+                .context(crate::ApiSnafu)
+                .is_err()
+            {
+                return Err(Error::Generic {
+                    error: format!(
+                        "Failed to create signatures for bundle (failed keyids: {})",
+                        style(sig_info.keyid.clone()).magenta()
+                    ),
+                });
+            }
+        }
+
+        Ok(())
     }
 
     fn construct_binary_prn(&self, version_prn: &str, binary_id: &str) -> Result<String, Error> {
