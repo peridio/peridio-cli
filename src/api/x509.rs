@@ -24,12 +24,12 @@ pub struct CreateCommand {
     #[arg(long, default_value = "false")]
     is_ca: bool,
 
-    /// The start date of the certificate's validity period (format: YYYY-MM-DD)
-    #[arg(long)]
+    /// The start date of the certificate's validity period
+    #[arg(long, value_name = "YYYY-MM-DD")]
     start_date: String,
 
-    /// The end date of the certificate's validity period (format: YYYY-MM-DD)
-    #[arg(long)]
+    /// The end date of the certificate's validity period
+    #[arg(long, value_name = "YYYY-MM-DD")]
     end_date: String,
 
     /// Path to the private key file of the signer (required if signer_cert is provided)
