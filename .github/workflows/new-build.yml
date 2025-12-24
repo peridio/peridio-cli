@@ -163,5 +163,5 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: peridio-cli-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/peridio-cli${{ matrix.suffix }}
+          name: peridio-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/peridio${{ matrix.suffix }}

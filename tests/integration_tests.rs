@@ -18,12 +18,12 @@ use uuid::Uuid;
 
 #[test]
 fn without_command_usage_is_shown() {
-    Command::cargo_bin("peridio-cli")
+    Command::cargo_bin("peridio")
         .unwrap()
         .assert()
         .code(2)
         .stderr(predicates::str::contains(
-            "Usage: peridio-cli [OPTIONS] <COMMAND>",
+            "Usage: peridio [OPTIONS] <COMMAND>",
         ))
         .stderr(
             predicates::str::contains("-a, --api-key <API_KEY>")
@@ -50,14 +50,12 @@ fn without_command_usage_is_shown() {
 
 #[test]
 fn with_users_subcommands_are_shown() {
-    Command::cargo_bin("peridio-cli")
+    Command::cargo_bin("peridio")
         .unwrap()
         .arg("users")
         .assert()
         .code(2)
-        .stderr(predicates::str::contains(
-            "Usage: peridio-cli users <COMMAND>",
-        ))
+        .stderr(predicates::str::contains("Usage: peridio users <COMMAND>"))
         .stderr(predicates::str::contains("  me"));
 }
 
@@ -73,7 +71,7 @@ fn with_users_with_me_shows_email_and_username() {
 
     PERIDIO_CLOUD_API.init();
 
-    let assert = Command::cargo_bin("peridio-cli")
+    let assert = Command::cargo_bin("peridio")
         .unwrap()
         .args(["--base-url", &base_url])
         .args(["--ca-path", &ca_path])
@@ -90,7 +88,7 @@ fn with_users_with_me_shows_email_and_username() {
         let peridio_cloud_api_exit_code = PERIDIO_CLOUD_API.write().exit_code();
 
         panic!(
-            "peridio-cli --base-url {} --ca-path {} --api-key {}\nSTDOUT:\n  {}\nSTDERR:\n  {}\n\nmix -S phx.server\nEXIT:{}",
+            "peridio --base-url {} --ca-path {} --api-key {}\nSTDOUT:\n  {}\nSTDERR:\n  {}\n\nmix -S phx.server\nEXIT:{}",
             base_url,
             ca_path,
             api_key,
@@ -177,7 +175,7 @@ fn peridio_cloud_path() -> PathBuf {
 
 fn random_name() -> String {
     format!(
-        "peridio-cli-{}",
+        "peridio-{}",
         Uuid::now_v7()
             .hyphenated()
             .encode_upper(&mut Uuid::encode_buffer())
@@ -257,7 +255,7 @@ impl User {
     fn create(email_domain: &str) -> Self {
         let username = random_name();
         let email = format!("{username}@{email_domain}");
-        let password = "peridio-cli";
+        let password = "peridio";
         let prn_temp_path = NamedTempFile::new().unwrap().into_temp_path();
 
         match peridio_cloud_core_mix_command()
@@ -403,7 +401,7 @@ fn config_init_creates_profile() {
     let api_key = "test-api-key";
 
     // Run config init with simulated input
-    let mut cmd = Command::cargo_bin("peridio-cli").unwrap();
+    let mut cmd = Command::cargo_bin("peridio").unwrap();
     cmd.args(["--profile", "temp-profile"]) // We need to provide a profile when using config-directory
         .args(["--config-directory", &temp_dir_path])
         .args(["config", "profiles", "create"])
@@ -464,7 +462,7 @@ fn config_upgrade_sets_api_version() {
     .unwrap();
 
     // Run config upgrade (need to provide dummy profile due to clap constraint)
-    let mut cmd = Command::cargo_bin("peridio-cli").unwrap();
+    let mut cmd = Command::cargo_bin("peridio").unwrap();
     cmd.args(["--profile", "dummy-profile"])
         .args(["--config-directory", &temp_dir_path])
         .args(["config", "upgrade"])

@@ -84,16 +84,16 @@ jobs:
           security -q set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
           # give permissions
-          chmod +x ./target/${{ matrix.target }}/release/peridio-cli
+          chmod +x ./target/${{ matrix.target }}/release/peridio
 
           # code sign
-          /usr/bin/codesign -s $APPLE_CODESIGNING_IDENTITY --deep -f --timestamp -o runtime ./target/${{ matrix.target }}/release/peridio-cli
+          /usr/bin/codesign -s $APPLE_CODESIGNING_IDENTITY --deep -f --timestamp -o runtime ./target/${{ matrix.target }}/release/peridio
 
           # verify signing
-          /usr/bin/codesign --verify --strict ./target/${{ matrix.target }}/release/peridio-cli
+          /usr/bin/codesign --verify --strict ./target/${{ matrix.target }}/release/peridio
 
           # zip file, notarize tool only works with zip files
-          ditto -c -k --sequesterRsrc --keepParent "./target/${{ matrix.target }}/release/peridio-cli" "./target/${{ matrix.target }}/release/peridio-cli.zip"
+          ditto -c -k --sequesterRsrc --keepParent "./target/${{ matrix.target }}/release/peridio" "./target/${{ matrix.target }}/release/peridio.zip"
 
           # notarize app
           xcrun notarytool submit \
@@ -101,10 +101,10 @@ jobs:
             --apple-id "$APPLE_ID" \
             --team-id "$APPLE_TEAM_ID" \
             --password "$APP_PASSWORD" \
-            "./target/${{ matrix.target }}/release/peridio-cli.zip"
+            "./target/${{ matrix.target }}/release/peridio.zip"
       - name: Package release
         run: |
-          mv ./target/${{ matrix.target }}/release/peridio-cli${{ matrix.suffix }} ./peridio${{ matrix.suffix }}
+          mv ./target/${{ matrix.target }}/release/peridio${{ matrix.suffix }} ./peridio${{ matrix.suffix }}
           tar -czf peridio-${{ github.ref_name }}_${{ matrix.target }}.tar.gz ./peridio${{ matrix.suffix }}
       - name: Upload Release
         uses: softprops/action-gh-release@v2
