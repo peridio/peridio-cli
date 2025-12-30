@@ -11,7 +11,6 @@ use std::{
 
 use clap::Parser;
 use config::Config;
-use log;
 use peridio_sdk::api::ApiOptions;
 use peridio_sdk::Api;
 use snafu::Snafu;
@@ -206,9 +205,7 @@ async fn main() -> ExitCode {
     env_logger::Builder::from_default_env()
         .filter_level(log_level)
         .try_init()
-        .unwrap_or_else(|_| {
-            // Logger already initialized, ignore the error
-        });
+        .unwrap_or(());
 
     match program.run().await {
         Err(error) => {

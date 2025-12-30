@@ -1,11 +1,11 @@
 use crate::api::Command;
-use crate::utils::peridio_resource_names::Prn;
+use crate::utils::prn_parser::Prn;
 use crate::utils::{PRNType, PRNValueParser};
 use crate::{ApiSnafu, Error, GlobalOptions};
 use clap::Parser;
 use peridio_sdk::api::artifact_versions::GetArtifactVersionParams;
 use peridio_sdk::api::artifacts::GetArtifactParams;
-use peridio_sdk::api::binaries::GetBinaryParams;
+use peridio_sdk::api::binaries::{GetBinaryDownloadUrlParams, GetBinaryParams};
 
 use peridio_sdk::api::bundles::{Bundle, GetBundleParams};
 use peridio_sdk::api::Api;
@@ -200,7 +200,7 @@ impl PullCommand {
                 custom_metadata: bundle_binary
                     .custom_metadata
                     .clone()
-                    .unwrap_or_else(|| Map::new()),
+                    .unwrap_or_else(Map::new),
             };
 
             // Store the PRN mapping for later use in downloads
@@ -355,29 +355,38 @@ impl PullCommand {
                     error: format!("PRN not found for binary_id: {}", manifest_item.binary_id),
                 })?;
 
-            // Get binary details for download URL using the stored PRN
-            let binary_response = api
+            // Get the download URL for the binary
+            let download_url_response = api
                 .binaries()
-                .get(GetBinaryParams {
+                .download_url(GetBinaryDownloadUrlParams {
                     prn: binary_prn.clone(),
                 })
                 .await
                 .context(ApiSnafu)?
                 .ok_or_else(|| Error::Generic {
-                    error: format!("Binary {} not found", manifest_item.binary_id),
+                    error: format!(
+                        "Download URL not found for binary {}",
+                        manifest_item.binary_id
+                    ),
                 })?;
 
-            let _binary = &binary_response.binary;
+            // Download the actual binary content
+            let client = reqwest::Client::new();
+            let response = client
+                .get(&download_url_response.download_url)
+                .send()
+                .await
+                .map_err(|e| Error::Generic {
+                    error: format!("Failed to download binary content: {}", e),
+                })?;
 
-            // TODO: Implement actual binary download
-            // The Binary struct should have a download URL field or we need to use
-            // a separate API to get the download URL for the binary content
-            let binary_content = vec![0u8; manifest_item.size as usize]; // Placeholder content
-
-            // When implemented, this should:
-            // 1. Get download URL from binary or separate API call
-            // 2. Download the actual binary content using HTTP client
-            // 3. Verify hash matches manifest_item.hash
+            let binary_content = response
+                .bytes()
+                .await
+                .map_err(|e| Error::Generic {
+                    error: format!("Failed to read binary content: {}", e),
+                })?
+                .to_vec();
 
             // Verify the content matches expected size
             let actual_size = binary_content.len() as u64;
@@ -390,8 +399,30 @@ impl PullCommand {
                 });
             }
 
-            // Create CPIO entry for this binary using the target name
-            let binary_builder = cpio::NewcBuilder::new(&manifest_item.target);
+            // Verify the content hash matches expected hash
+            use sha2::{Digest, Sha256};
+            let mut hasher = Sha256::new();
+            hasher.update(&binary_content);
+            let computed_hash = format!("{:x}", hasher.finalize());
+
+            if computed_hash != manifest_item.hash {
+                return Err(Error::Generic {
+                    error: format!(
+                        "Hash mismatch for binary {}: expected {}, got {}",
+                        manifest_item.binary_id, manifest_item.hash, computed_hash
+                    ),
+                });
+            }
+
+            // Get artifact name for the binary filename
+            let artifact_name = bundle_json
+                .artifacts
+                .get(&manifest_item.artifact_id)
+                .map(|artifact| artifact.name.as_str())
+                .unwrap_or(&manifest_item.target);
+
+            // Create CPIO entry for this binary using the artifact name
+            let binary_builder = cpio::NewcBuilder::new(artifact_name);
             let binary_size = binary_content.len() as u32;
             let mut binary_writer = binary_builder.write(zstd_writer, binary_size);
             io::copy(&mut binary_content.as_slice(), &mut binary_writer).map_err(|e| {
@@ -409,10 +440,7 @@ impl PullCommand {
                 ),
             })?;
 
-            eprintln!(
-                "Added {} to archive ({} bytes)",
-                manifest_item.target, actual_size
-            );
+            eprintln!("Added {} to archive ({} bytes)", artifact_name, actual_size);
         }
 
         // Write CPIO trailer

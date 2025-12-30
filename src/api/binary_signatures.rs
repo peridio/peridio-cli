@@ -18,7 +18,10 @@ use ed25519_dalek::SigningKey;
 use peridio_sdk::api::binary_signatures::CreateBinarySignatureParams;
 use peridio_sdk::api::binary_signatures::CreateBinarySignatureResponse;
 use peridio_sdk::api::binary_signatures::DeleteBinarySignatureParams;
+use peridio_sdk::api::binary_signatures::ListBinarySignaturesParams;
+use peridio_sdk::api::binary_signatures::ListBinarySignaturesResponse;
 use peridio_sdk::api::Api;
+
 use sha2::Digest;
 use sha2::Sha256;
 use snafu::ResultExt;
@@ -27,6 +30,7 @@ use snafu::ResultExt;
 pub enum BinarySignaturesCommand {
     Create(Box<Command<CreateCommand>>),
     Delete(Command<DeleteCommand>),
+    List(Command<ListCommand>),
 }
 
 impl BinarySignaturesCommand {
@@ -34,6 +38,7 @@ impl BinarySignaturesCommand {
         match self {
             Self::Create(cmd) => cmd.run(global_options).await,
             Self::Delete(cmd) => cmd.run(global_options).await,
+            Self::List(cmd) => cmd.run(global_options).await,
         }
     }
 }
@@ -277,5 +282,73 @@ impl Command<DeleteCommand> {
         }
 
         Ok(())
+    }
+}
+
+#[derive(Parser, Debug)]
+pub struct ListCommand {
+    /// Search string to filter binary signatures by binary_prn, signature, or keyid
+    #[arg(long, short = 's')]
+    pub search: Option<String>,
+}
+
+impl Command<ListCommand> {
+    async fn run(self, global_options: GlobalOptions) -> Result<(), Error> {
+        let params = ListBinarySignaturesParams {
+            list: crate::utils::list::ListArgs {
+                limit: None,
+                order: None,
+                search: self.inner.search,
+                page: None,
+            }
+            .into(),
+        };
+
+        let api = Api::from(global_options);
+
+        match api
+            .binary_signatures()
+            .list(params)
+            .await
+            .context(ApiSnafu)?
+        {
+            Some(response) => print_json!(&response),
+            None => panic!(),
+        }
+
+        Ok(())
+    }
+}
+
+/// Helper function to check if a binary signature already exists
+pub async fn signature_exists(api: &Api, binary_prn: &str, keyid: &str) -> Result<bool, Error> {
+    let params = ListBinarySignaturesParams {
+        list: crate::utils::list::ListArgs {
+            limit: None,
+            order: None,
+            search: Some(format!(
+                "binary_prn:'{}' and signature.signing_key.keyid:'{}'",
+                binary_prn, keyid
+            )),
+            page: None,
+        }
+        .into(),
+    };
+
+    match api
+        .binary_signatures()
+        .list(params)
+        .await
+        .context(ApiSnafu)?
+    {
+        Some(ListBinarySignaturesResponse {
+            binary_signatures, ..
+        }) => {
+            // If we get any results, it means a signature exists for this binary_prn and keyid
+            // The search already filtered for both values
+
+            Ok(!binary_signatures.is_empty())
+        }
+        None => Ok(false),
     }
 }

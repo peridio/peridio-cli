@@ -20,6 +20,7 @@ use peridio_sdk::api::bundles::{
 use peridio_sdk::api::Api;
 
 use console::style;
+use log::{debug, info};
 
 use sha2::Digest;
 use snafu::ResultExt;
@@ -94,7 +95,7 @@ impl PushCommand {
         // First pass: extract and parse bundle.json
         let bundle_json = self.extract_bundle_json().await?;
 
-        eprintln!(
+        info!(
             "Processing bundle with {} artifacts",
             bundle_json.artifacts.len()
         );
@@ -118,7 +119,7 @@ impl PushCommand {
             .stream_process_binaries(api, &bundle_json, binary_info_map)
             .await?;
 
-        eprintln!("Pushing bundle...");
+        info!("Pushing bundle...");
 
         // Create the bundle
         let bundle_prn = self
@@ -128,7 +129,7 @@ impl PushCommand {
         // Sign the bundle if signatures are present
         self.sign_bundle(api, &bundle_json, &bundle_prn).await?;
 
-        eprintln!("Bundle push completed successfully");
+        info!("Bundle push completed successfully");
         Ok(())
     }
 
@@ -169,12 +170,19 @@ impl PushCommand {
                     error: format!("Invalid UTF-8 in bundle.json: {}", e),
                 })?;
 
-                bundle_json =
-                    Some(serde_json::from_str(&json_str).map_err(|e| Error::Generic {
+                let parsed_bundle_json =
+                    serde_json::from_str(&json_str).map_err(|e| Error::Generic {
                         error: format!("Failed to parse bundle.json: {}", e),
-                    })?);
+                    })?;
 
-                eprintln!("Parsed bundle.json");
+                debug!(
+                    "Bundle JSON: {}",
+                    serde_json::to_string_pretty(&parsed_bundle_json)
+                        .unwrap_or_else(|_| "Failed to pretty-print JSON".to_string())
+                );
+
+                bundle_json = Some(parsed_bundle_json);
+                debug!("Parsed bundle.json");
                 break;
             }
 
@@ -764,8 +772,14 @@ impl PushCommand {
         bundle_prn: &str,
     ) -> Result<(), Error> {
         if bundle_json.bundle.signatures.is_empty() {
+            debug!("No bundle signatures to process");
             return Ok(());
         }
+
+        debug!(
+            "Processing {} bundle signatures",
+            bundle_json.bundle.signatures.len()
+        );
 
         for sig_info in &bundle_json.bundle.signatures {
             let params = CreateBundleSignatureParams {
@@ -775,19 +789,35 @@ impl PushCommand {
                 signing_key_keyid: Some(sig_info.keyid.clone()),
             };
 
-            if api
+            match api
                 .bundle_signatures()
                 .create(params)
                 .await
                 .context(crate::ApiSnafu)
-                .is_err()
             {
-                return Err(Error::Generic {
-                    error: format!(
-                        "Failed to create signatures for bundle (failed keyids: {})",
-                        style(sig_info.keyid.clone()).magenta()
-                    ),
-                });
+                Ok(_) => {
+                    debug!("Bundle signature created for keyid: {}", sig_info.keyid);
+                }
+                Err(err) => {
+                    // Check if this is the "Invalid signature" error meaning the signature
+                    // is for binary content, not bundle hash
+                    let error_str = err.to_string();
+                    if error_str.contains("Invalid signature")
+                        && error_str.contains("sign the hash of the bundle")
+                    {
+                        // Skip this signature - it's for binary content, not bundle hash
+                        debug!("Skipping signature for keyid {} - appears to be for binary content, not bundle hash", sig_info.keyid);
+                        continue;
+                    } else {
+                        // Some other error, fail
+                        return Err(Error::Generic {
+                            error: format!(
+                                "Failed to create signatures for bundle (failed keyids: {})",
+                                style(sig_info.keyid.clone()).magenta()
+                            ),
+                        });
+                    }
+                }
             }
         }
 
@@ -969,22 +999,20 @@ impl PushCommand {
 
                             if remote_hash == local_hash {
                                 eprintln!("Bundle already exists with the same content. Skipping.");
-                                return Ok(false); // Don't continue processing
+                                Ok(false) // Don't continue processing
                             } else {
-                                return Err(Error::Generic {
+                                Err(Error::Generic {
                                     error: format!(
                                         "Bundle already exists but with different hash. Local hash: {}, Remote hash: {}",
                                         local_hash, remote_hash
                                     ),
-                                });
+                                })
                             }
                         }
-                        Bundle::V1(_) => {
-                            return Err(Error::Generic {
-                                error: "Bundle existence check is only supported for v2 bundles"
-                                    .to_string(),
-                            });
-                        }
+                        Bundle::V1(_) => Err(Error::Generic {
+                            error: "Bundle existence check is only supported for v2 bundles"
+                                .to_string(),
+                        }),
                     }
                 }
                 None => {

@@ -1,3 +1,4 @@
+use crate::api::binary_signatures;
 use crate::api::binary_upload::BinaryUploader;
 use crate::ApiSnafu;
 use crate::Error;
@@ -266,24 +267,40 @@ impl BinaryProcessor {
                         Err(_) => failed_keyids.push(sig_config.keyid.clone()),
                     }
                 } else {
-                    // Use pre-computed signature
-                    let params = peridio_sdk::api::binary_signatures::CreateBinarySignatureParams {
-                        binary_prn: binary.prn.clone(),
-                        signing_key_prn: None,
-                        signature: sig_config.signature.clone(),
-                        signing_key_keyid: Some(sig_config.keyid.clone()),
-                    };
-
-                    match api
-                        .binary_signatures()
-                        .create(params)
+                    // Check if signature already exists before creating
+                    match binary_signatures::signature_exists(api, &binary.prn, &sig_config.keyid)
                         .await
-                        .context(crate::ApiSnafu)
                     {
-                        Ok(_) => {
+                        Ok(true) => {
+                            // Signature already exists, treat as success
                             successful_signatures += 1;
                         }
+                        Ok(false) => {
+                            // Signature doesn't exist, create it
+                            let params =
+                                peridio_sdk::api::binary_signatures::CreateBinarySignatureParams {
+                                    binary_prn: binary.prn.clone(),
+                                    signing_key_prn: None,
+                                    signature: sig_config.signature.clone(),
+                                    signing_key_keyid: Some(sig_config.keyid.clone()),
+                                };
+
+                            match api
+                                .binary_signatures()
+                                .create(params)
+                                .await
+                                .context(crate::ApiSnafu)
+                            {
+                                Ok(_) => {
+                                    successful_signatures += 1;
+                                }
+                                Err(_) => {
+                                    failed_keyids.push(sig_config.keyid.clone());
+                                }
+                            }
+                        }
                         Err(_) => {
+                            // Error checking existence, add to failed list
                             failed_keyids.push(sig_config.keyid.clone());
                         }
                     }
@@ -302,7 +319,8 @@ impl BinaryProcessor {
         }
         // No fallback needed - all signing should go through signatures field
 
-        // After signing, transition binary to Signed state
+        // After processing signatures (created or verified existing), transition binary to Signed state
+        // This ensures the binary is marked as signed whether we created new signatures or found existing ones
         let binary = self
             .change_binary_status(BinaryState::Signed, binary, api)
             .await?;
