@@ -340,10 +340,8 @@ impl CreateCommand {
 
                 // Read binary content if needed for processing
                 let binary_content = if matches!(binary.state, BinaryState::Uploadable) {
-                    let content_path = self.content_path.clone().ok_or_else(|| Error::Api {
-                        source: peridio_sdk::api::Error::Unknown {
-                            error: "Content path is required for binary upload".to_string(),
-                        },
+                    let content_path = self.content_path.clone().ok_or_else(|| Error::Generic {
+                        error: "Content path is required for binary upload".to_string(),
                     })?;
                     Some(fs::read(&content_path).context(NonExistingPathSnafu {
                         path: &content_path,
@@ -895,19 +893,15 @@ impl CreateCommand {
         };
 
         let binary = match reset_command
-            .run(self.global_options.clone().ok_or_else(|| Error::Api {
-                source: peridio_sdk::api::Error::Unknown {
-                    error: "Global options not available".to_string(),
-                },
+            .run(self.global_options.clone().ok_or_else(|| Error::Generic {
+                error: "Global options not available".to_string(),
             })?)
             .await?
         {
             Some(UpdateBinaryResponse { binary }) => binary,
             None => {
-                return Err(Error::Api {
-                    source: peridio_sdk::api::Error::Unknown {
-                        error: "Failed to reset binary status".to_string(),
-                    },
+                return Err(Error::Generic {
+                    error: "Failed to reset binary status".to_string(),
                 })
             }
         };

@@ -13,14 +13,15 @@ use peridio_sdk::api::binaries::{
     Binary, BinaryState, CreateBinaryParams, CreateBinaryResponse, GetBinaryParams,
     GetBinaryResponse,
 };
+use peridio_sdk::api::bundle_signatures::CreateBundleSignatureParams;
 use peridio_sdk::api::bundles::{
-    Bundle, CreateBundleBinary, CreateBundleParams, CreateBundleParamsV2,
+    Bundle, CreateBundleBinary, CreateBundleParams, CreateBundleParamsV2, GetBundleParams,
 };
 use peridio_sdk::api::Api;
 
 use console::style;
-use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use log::{debug, info};
+
 use sha2::Digest;
 use snafu::ResultExt;
 use std::collections::HashMap;
@@ -30,56 +31,8 @@ use std::time::Duration;
 use tokio::time::sleep;
 
 // Bundle JSON structure definitions
-#[derive(Debug, Deserialize, Serialize)]
-pub struct BundleJson {
-    pub artifacts: HashMap<String, ArtifactInfo>,
-    pub bundle: BundleInfo,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ArtifactInfo {
-    pub name: String,
-    pub description: Option<String>,
-    pub versions: HashMap<String, ArtifactVersionInfo>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ArtifactVersionInfo {
-    pub version: String,
-    pub description: Option<String>,
-    pub binaries: HashMap<String, BinaryInfo>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct BinaryInfo {
-    pub description: Option<String>,
-    pub signatures: Vec<SignatureInfo>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct SignatureInfo {
-    pub keyid: String,
-    pub sig: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct BundleInfo {
-    pub id: String,
-    pub name: Option<String>,
-    pub signatures: Vec<SignatureInfo>,
-    pub manifest: Vec<ManifestItem>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ManifestItem {
-    pub hash: String,
-    pub size: u64,
-    pub binary_id: String,
-    pub target: String,
-    pub artifact_version_id: String,
-    pub artifact_id: String,
-    pub custom_metadata: Map<String, Value>,
-}
+// Import shared bundle format structs
+use super::{ArtifactInfo, ArtifactVersionInfo, BinaryInfo, BundleJson, ManifestItem};
 
 #[derive(Parser, Debug)]
 pub struct PushCommand {
@@ -142,10 +95,19 @@ impl PushCommand {
         // First pass: extract and parse bundle.json
         let bundle_json = self.extract_bundle_json().await?;
 
-        eprintln!(
+        info!(
             "Processing bundle with {} artifacts",
             bundle_json.artifacts.len()
         );
+
+        // Check if bundle already exists with same hash
+        let should_continue = self
+            .check_bundle_exists(api, &bundle_json, organization_prn)
+            .await?;
+
+        if !should_continue {
+            return Ok(()); // Bundle already exists, skip processing
+        }
 
         // Create artifacts and versions first
         let binary_info_map = self
@@ -157,14 +119,17 @@ impl PushCommand {
             .stream_process_binaries(api, &bundle_json, binary_info_map)
             .await?;
 
-        eprintln!("Pushing bundle...");
+        info!("Pushing bundle...");
 
         // Create the bundle
-        let _bundle_prn = self
+        let bundle_prn = self
             .create_bundle(api, &bundle_json, &final_created_binaries, organization_prn)
             .await?;
 
-        eprintln!("Bundle push completed successfully");
+        // Sign the bundle if signatures are present
+        self.sign_bundle(api, &bundle_json, &bundle_prn).await?;
+
+        info!("Bundle push completed successfully");
         Ok(())
     }
 
@@ -205,12 +170,19 @@ impl PushCommand {
                     error: format!("Invalid UTF-8 in bundle.json: {}", e),
                 })?;
 
-                bundle_json =
-                    Some(serde_json::from_str(&json_str).map_err(|e| Error::Generic {
+                let parsed_bundle_json =
+                    serde_json::from_str(&json_str).map_err(|e| Error::Generic {
                         error: format!("Failed to parse bundle.json: {}", e),
-                    })?);
+                    })?;
 
-                eprintln!("Parsed bundle.json");
+                debug!(
+                    "Bundle JSON: {}",
+                    serde_json::to_string_pretty(&parsed_bundle_json)
+                        .unwrap_or_else(|_| "Failed to pretty-print JSON".to_string())
+                );
+
+                bundle_json = Some(parsed_bundle_json);
+                debug!("Parsed bundle.json");
                 break;
             }
 
@@ -793,6 +765,65 @@ impl PushCommand {
         }
     }
 
+    async fn sign_bundle(
+        &self,
+        api: &Api,
+        bundle_json: &BundleJson,
+        bundle_prn: &str,
+    ) -> Result<(), Error> {
+        if bundle_json.bundle.signatures.is_empty() {
+            debug!("No bundle signatures to process");
+            return Ok(());
+        }
+
+        debug!(
+            "Processing {} bundle signatures",
+            bundle_json.bundle.signatures.len()
+        );
+
+        for sig_info in &bundle_json.bundle.signatures {
+            let params = CreateBundleSignatureParams {
+                bundle_prn: bundle_prn.to_string(),
+                signing_key_prn: None,
+                signature: sig_info.sig.clone(),
+                signing_key_keyid: Some(sig_info.keyid.clone()),
+            };
+
+            match api
+                .bundle_signatures()
+                .create(params)
+                .await
+                .context(crate::ApiSnafu)
+            {
+                Ok(_) => {
+                    debug!("Bundle signature created for keyid: {}", sig_info.keyid);
+                }
+                Err(err) => {
+                    // Check if this is the "Invalid signature" error meaning the signature
+                    // is for binary content, not bundle hash
+                    let error_str = err.to_string();
+                    if error_str.contains("Invalid signature")
+                        && error_str.contains("sign the hash of the bundle")
+                    {
+                        // Skip this signature - it's for binary content, not bundle hash
+                        debug!("Skipping signature for keyid {} - appears to be for binary content, not bundle hash", sig_info.keyid);
+                        continue;
+                    } else {
+                        // Some other error, fail
+                        return Err(Error::Generic {
+                            error: format!(
+                                "Failed to create signatures for bundle (failed keyids: {})",
+                                style(sig_info.keyid.clone()).magenta()
+                            ),
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     fn construct_binary_prn(&self, version_prn: &str, binary_id: &str) -> Result<String, Error> {
         let prn_builder = PRNBuilder::from_prn(version_prn).map_err(|e| Error::Generic {
             error: format!("Failed to parse version PRN {}: {}", version_prn, e),
@@ -932,5 +963,74 @@ impl PushCommand {
             .await?;
 
         Ok(processed_binary.prn)
+    }
+
+    async fn check_bundle_exists(
+        &self,
+        api: &Api,
+        bundle_json: &BundleJson,
+        organization_prn: &str,
+    ) -> Result<bool, Error> {
+        // Extract organization ID from organization PRN
+        let org_id = organization_prn
+            .split(':')
+            .nth(2)
+            .ok_or_else(|| Error::Generic {
+                error: "Invalid organization PRN format".to_string(),
+            })?;
+
+        let bundle_prn = PRNBuilder::new(org_id.to_string())
+            .bundle(&bundle_json.bundle.id)
+            .map_err(|e| Error::Generic {
+                error: format!("Failed to build bundle PRN: {}", e),
+            })?;
+
+        let params = GetBundleParams { prn: bundle_prn };
+
+        match api.bundles().get(params).await {
+            Ok(response) => match response {
+                Some(response) => {
+                    let local_hash = &bundle_json.bundle.hash;
+
+                    // Only support v2 bundles for hash comparison
+                    match &response.bundle {
+                        Bundle::V2(existing_bundle) => {
+                            let remote_hash = &existing_bundle.hash;
+
+                            if remote_hash == local_hash {
+                                eprintln!("Bundle already exists with the same content. Skipping.");
+                                Ok(false) // Don't continue processing
+                            } else {
+                                Err(Error::Generic {
+                                    error: format!(
+                                        "Bundle already exists but with different hash. Local hash: {}, Remote hash: {}",
+                                        local_hash, remote_hash
+                                    ),
+                                })
+                            }
+                        }
+                        Bundle::V1(_) => Err(Error::Generic {
+                            error: "Bundle existence check is only supported for v2 bundles"
+                                .to_string(),
+                        }),
+                    }
+                }
+                None => {
+                    // Bundle doesn't exist, continue with creation
+                    eprintln!("Bundle does not exist, proceeding with creation...");
+                    Ok(true) // Continue processing
+                }
+            },
+            Err(e) => {
+                // Check if it's a 404 error (bundle doesn't exist)
+                if e.to_string().contains("404") {
+                    eprintln!("Bundle does not exist, proceeding with creation...");
+                    Ok(true) // Continue processing
+                } else {
+                    // Some other error occurred
+                    Err(Error::Api { source: e })
+                }
+            }
+        }
     }
 }
