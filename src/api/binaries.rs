@@ -37,6 +37,19 @@ use peridio_sdk::api::bundle_overrides::CreateBundleOverrideParams;
 use peridio_sdk::api::bundles::{
     Bundle, CreateBundleBinary, CreateBundleParams, CreateBundleParamsV1, CreateBundleParamsV2,
 };
+use peridio_sdk::api::releases::CreateReleaseParams;
+use peridio_sdk::api::releases::Release;
+use peridio_sdk::api::Api;
+use peridio_sdk::list_params::ListParams;
+
+use sha2::{Digest, Sha256};
+use snafu::ResultExt;
+use std::cmp;
+
+use std::thread::available_parallelism;
+
+use std::{fs, io};
+use time::OffsetDateTime;
 
 // Trait to add helper methods to Bundle enum
 trait BundleExt {
@@ -60,49 +73,35 @@ impl BundleExt for Bundle {
     }
 }
 
-// Helper function to create version-specific CreateBundleParams
-fn create_bundle_params(
-    api_version: u8,
+fn create_bundle_params_v1(
     artifact_version_prns: Vec<String>,
     id: Option<String>,
     name: Option<String>,
-) -> Result<CreateBundleParams, crate::Error> {
-    use crate::Error;
-    match api_version {
-        1 => Ok(CreateBundleParams::V1(CreateBundleParamsV1 {
-            artifact_version_prns,
-            id,
-            name,
-        })),
-        2 => Ok(CreateBundleParams::V2(CreateBundleParamsV2 {
-            binaries: artifact_version_prns
-                .into_iter()
-                .map(|prn| CreateBundleBinary {
-                    prn,
-                    custom_metadata: None,
-                })
-                .collect(),
-            id,
-            name,
-        })),
-        _ => Err(Error::Generic {
-            error: format!("Unsupported API version: {}", api_version),
-        }),
-    }
+) -> CreateBundleParams {
+    CreateBundleParams::V1(CreateBundleParamsV1 {
+        artifact_version_prns,
+        id,
+        name,
+    })
 }
-use peridio_sdk::api::releases::CreateReleaseParams;
-use peridio_sdk::api::releases::Release;
-use peridio_sdk::api::Api;
-use peridio_sdk::list_params::ListParams;
 
-use sha2::{Digest, Sha256};
-use snafu::ResultExt;
-use std::cmp;
-
-use std::thread::available_parallelism;
-
-use std::{fs, io};
-use time::OffsetDateTime;
+fn create_bundle_params_v2(
+    binary_prns: Vec<String>,
+    id: Option<String>,
+    name: Option<String>,
+) -> CreateBundleParams {
+    CreateBundleParams::V2(CreateBundleParamsV2 {
+        binaries: binary_prns
+            .into_iter()
+            .map(|prn| CreateBundleBinary {
+                prn,
+                custom_metadata: None,
+            })
+            .collect(),
+        id,
+        name,
+    })
+}
 
 #[derive(Debug, serde::Serialize)]
 pub struct CreateBinaryCommandResponse {
@@ -604,12 +603,15 @@ impl CreateCommand {
 
         eprintln!("Fetching or creating bundle for binary...");
 
-        let bundle_params = create_bundle_params(
-            api_version,
-            vec![artifact_version.prn.clone()],
-            None,
-            Some(name),
-        )?;
+        let bundle_params = match api_version {
+            1 => create_bundle_params_v1(vec![artifact_version.prn.clone()], None, Some(name)),
+            2 => create_bundle_params_v2(vec![binary.prn.clone()], None, Some(name)),
+            _ => {
+                return Err(Error::Generic {
+                    error: format!("Unsupported API version: {}", api_version),
+                });
+            }
+        };
 
         match api
             .bundles()
@@ -1113,5 +1115,78 @@ impl From<ArgBinaryState> for BinaryState {
             ArgBinaryState::Signed => BinaryState::Signed,
             ArgBinaryState::Uploadable => BinaryState::Uploadable,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn create_bundle_params_v1_uses_artifact_version_prns() {
+        let artifact_version_prn = "prn:1:org:artifact_version:artifact-version-id".to_string();
+        let params = create_bundle_params_v1(
+            vec![artifact_version_prn.clone()],
+            Some("bundle-id".to_string()),
+            Some("bundle-name".to_string()),
+        );
+
+        let CreateBundleParams::V1(v1_params) = params else {
+            panic!("expected v1 bundle params");
+        };
+
+        assert_eq!(v1_params.artifact_version_prns, vec![artifact_version_prn]);
+        assert_eq!(v1_params.id, Some("bundle-id".to_string()));
+        assert_eq!(v1_params.name, Some("bundle-name".to_string()));
+    }
+
+    #[test]
+    fn create_bundle_params_v2_uses_binary_prns() {
+        let binary_prn = "prn:1:org:binary:binary-id".to_string();
+        let params = create_bundle_params_v2(
+            vec![binary_prn.clone()],
+            Some("bundle-id".to_string()),
+            Some("bundle-name".to_string()),
+        );
+
+        let CreateBundleParams::V2(v2_params) = params else {
+            panic!("expected v2 bundle params");
+        };
+
+        assert_eq!(v2_params.binaries.len(), 1);
+        assert_eq!(v2_params.binaries[0].prn, binary_prn);
+        assert_eq!(v2_params.binaries[0].custom_metadata, None);
+        assert_eq!(v2_params.id, Some("bundle-id".to_string()));
+        assert_eq!(v2_params.name, Some("bundle-name".to_string()));
+    }
+
+    #[test]
+    fn create_bundle_params_v2_maps_all_input_prns_to_binaries() {
+        let binary_prn_one = "prn:1:org:binary:binary-id-1".to_string();
+        let binary_prn_two = "prn:1:org:binary:binary-id-2".to_string();
+
+        let params = create_bundle_params_v2(
+            vec![binary_prn_one.clone(), binary_prn_two.clone()],
+            None,
+            None,
+        );
+
+        let CreateBundleParams::V2(v2_params) = params else {
+            panic!("expected v2 bundle params");
+        };
+
+        let mapped_prns: Vec<&str> = v2_params
+            .binaries
+            .iter()
+            .map(|binary| binary.prn.as_str())
+            .collect();
+        assert_eq!(
+            mapped_prns,
+            vec![binary_prn_one.as_str(), binary_prn_two.as_str()]
+        );
+        assert!(v2_params
+            .binaries
+            .iter()
+            .all(|binary| binary.custom_metadata.is_none()));
     }
 }
