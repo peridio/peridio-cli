@@ -366,14 +366,13 @@ impl Command<RemoveDeviceCommand> {
 
         let api = Api::from(global_options);
 
-        match api
+        if let Some(response) = api
             .bundle_overrides()
             .remove_device(params)
             .await
             .context(ApiSnafu)?
         {
-            Some(response) => print_json!(&response),
-            None => panic!(),
+            print_json!(&response)
         }
 
         Ok(())
