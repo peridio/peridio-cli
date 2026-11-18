@@ -1,4 +1,5 @@
 use super::binary_processor::{BinaryProcessor, BinaryProcessorConfig, SignatureConfig};
+use super::binary_upload::UploadSource;
 
 use super::Command;
 use crate::print_json;
@@ -45,6 +46,7 @@ use peridio_sdk::list_params::ListParams;
 use sha2::{Digest, Sha256};
 use snafu::ResultExt;
 use std::cmp;
+use std::path::Path;
 
 use std::thread::available_parallelism;
 
@@ -337,14 +339,15 @@ impl CreateCommand {
                     );
                 }
 
-                // Read binary content if needed for processing
-                let binary_content = if matches!(binary.state, BinaryState::Uploadable) {
+                // Content is streamed per part by the uploader; do not read the file into memory here.
+                let upload_path = if matches!(binary.state, BinaryState::Uploadable) {
                     let content_path = self.content_path.clone().ok_or_else(|| Error::Generic {
                         error: "Content path is required for binary upload".to_string(),
                     })?;
-                    Some(fs::read(&content_path).context(NonExistingPathSnafu {
+                    fs::metadata(&content_path).context(NonExistingPathSnafu {
                         path: &content_path,
-                    })?)
+                    })?;
+                    Some(content_path)
                 } else {
                     None
                 };
@@ -392,7 +395,13 @@ impl CreateCommand {
 
                 let processor = BinaryProcessor::new(config);
                 let binary = processor
-                    .process_binary(&binary, &api, binary_content.as_deref())
+                    .process_binary(
+                        &binary,
+                        &api,
+                        upload_path
+                            .as_deref()
+                            .map(|path| UploadSource::File(Path::new(path))),
+                    )
                     .await?;
 
                 let bundle = if self.bundle_override_prn.is_some()

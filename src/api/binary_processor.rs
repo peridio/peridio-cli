@@ -1,5 +1,5 @@
 use crate::api::binary_signatures;
-use crate::api::binary_upload::BinaryUploader;
+use crate::api::binary_upload::{BinaryUploader, UploadSource};
 use crate::ApiSnafu;
 use crate::Error;
 use crate::GlobalOptions;
@@ -92,7 +92,7 @@ impl BinaryProcessor {
         &self,
         binary: &Binary,
         api: &Api,
-        binary_content: Option<&[u8]>,
+        binary_content: Option<UploadSource<'_>>,
     ) -> Result<Binary, Error> {
         match binary.state {
             BinaryState::Uploadable => {
@@ -174,7 +174,7 @@ impl BinaryProcessor {
         &self,
         binary: &Binary,
         api: &Api,
-        binary_content: &[u8],
+        binary_content: UploadSource<'_>,
     ) -> Result<Binary, Error> {
         eprintln!("Evaluating binary parts...");
 
@@ -190,7 +190,7 @@ impl BinaryProcessor {
         }
 
         uploader
-            .upload_from_memory(
+            .upload(
                 binary,
                 api,
                 self.config.global_options.clone(),
