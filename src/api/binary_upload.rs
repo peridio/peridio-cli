@@ -41,26 +41,44 @@ impl UploadSource<'_> {
         }
     }
 
-    /// Reads the bytes in `start..start + len` (fewer if the source ends first).
+    /// Reads exactly the bytes in `start..start + len`. Fails with `UnexpectedEof` when the
+    /// source ends before `len` bytes are available.
     pub async fn read_part(&self, start: u64, len: u64) -> io::Result<Vec<u8>> {
+        let short_read = || {
+            io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                format!("expected {len} bytes at offset {start} but the content ended early"),
+            )
+        };
+
         match self {
             UploadSource::File(path) => {
                 let path = path.to_path_buf();
-                tokio::task::spawn_blocking(move || {
+                let capacity = usize::try_from(len).map_err(io::Error::other)?;
+                let buffer = tokio::task::spawn_blocking(move || {
                     // a separate handle per part avoids racing on a shared seek position
                     let mut file = std::fs::File::open(path)?;
                     file.seek(SeekFrom::Start(start))?;
-                    let mut buffer = Vec::with_capacity(len as usize);
+                    let mut buffer = Vec::with_capacity(capacity);
                     file.take(len).read_to_end(&mut buffer)?;
-                    Ok(buffer)
+                    Ok::<_, io::Error>(buffer)
                 })
                 .await
-                .map_err(io::Error::other)?
+                .map_err(io::Error::other)??;
+
+                if buffer.len() != capacity {
+                    return Err(short_read());
+                }
+
+                Ok(buffer)
             }
             UploadSource::Memory(content) => {
-                let start = cmp::min(start as usize, content.len());
-                let end = cmp::min(start.saturating_add(len as usize), content.len());
-                Ok(content[start..end].to_vec())
+                let end = start
+                    .checked_add(len)
+                    .filter(|end| *end <= content.len() as u64)
+                    .ok_or_else(short_read)?;
+
+                Ok(content[start as usize..end as usize].to_vec())
             }
         }
     }
@@ -128,6 +146,17 @@ impl BinaryUploader {
         let file_size = source.len().map_err(|e| Error::Generic {
             error: format!("Failed to determine binary content size: {e}"),
         })?;
+
+        if let Some(expected_size) = binary.size {
+            if expected_size != file_size {
+                return Err(Error::Generic {
+                    error: format!(
+                        "Binary content is {file_size} bytes but the binary expects {expected_size} bytes; the content changed after it was hashed"
+                    ),
+                });
+            }
+        }
+
         let chunks_length = file_size.div_ceil(self.binary_part_size);
 
         let client = Client::new();
@@ -162,7 +191,7 @@ impl BinaryUploader {
                 let pb = Arc::clone(&pb);
 
                 async move {
-                    // we ignore the ones we already created
+                    // parts that are already uploaded and valid are skipped
                     if let Some(binary_part) =
                         ctx.binary_parts.iter().find(|x| x.index as u64 == index)
                     {
@@ -229,21 +258,45 @@ impl BinaryUploader {
 
         let bin_part = create_command
             .run(params.global_options)
-            .await?
+            .await
+            .map_err(|e| Error::Generic {
+                error: format!(
+                    "Failed to create binary part {index}: {e}. Rerun the command to resume the upload."
+                ),
+            })?
             .ok_or_else(|| Error::Generic {
                 error: format!("Cannot create binary part {index}"),
             })?;
 
-        // do amazon request
-        let body = Body::from(params.chunk_data);
-
         let hash_base64 = general_purpose::STANDARD.encode(hash);
 
-        let res = params
-            .client
-            .put(bin_part.binary_part.presigned_upload_url)
-            .body(body)
-            .header("x-amz-checksum-sha256", &hash_base64)
+        Self::put_part(
+            &params.client,
+            bin_part.binary_part.presigned_upload_url,
+            params.chunk_data,
+            &hash_base64,
+            index,
+        )
+        .await?;
+
+        params.pb.inc(chunk_size as u64);
+
+        Ok(())
+    }
+
+    async fn put_part(
+        client: &Client,
+        url: String,
+        chunk_data: Vec<u8>,
+        hash_base64: &str,
+        index: u64,
+    ) -> Result<(), Error> {
+        let chunk_size = chunk_data.len();
+
+        let res = client
+            .put(url)
+            .body(Body::from(chunk_data))
+            .header("x-amz-checksum-sha256", hash_base64)
             .header("content-length", chunk_size)
             .header("content-type", "application/octet-stream")
             .send()
@@ -260,8 +313,6 @@ impl BinaryUploader {
                 ),
             });
         }
-
-        params.pb.inc(chunk_size as u64);
 
         Ok(())
     }
@@ -305,12 +356,98 @@ mod tests {
         assert_eq!(source.len().unwrap(), 10_000);
 
         // first, middle, and short last part
-        for (start, len, expected_len) in [(0, 4096, 4096), (4096, 4096, 4096), (8192, 4096, 1808)]
-        {
+        for (start, len) in [(0, 4096), (4096, 4096), (8192, 1808)] {
             let part = source.read_part(start, len).await.unwrap();
-            assert_eq!(part.len(), expected_len);
-            assert_eq!(part, data[start as usize..start as usize + expected_len]);
+            assert_eq!(part.len() as u64, len);
+            assert_eq!(part, data[start as usize..(start + len) as usize]);
         }
+    }
+
+    #[tokio::test]
+    async fn short_read_is_an_error() {
+        let data = sample(100);
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        tmp.write_all(&data).unwrap();
+
+        for source in [UploadSource::File(tmp.path()), UploadSource::Memory(&data)] {
+            let err = source.read_part(50, 100).await.unwrap_err();
+            assert_eq!(err.kind(), io::ErrorKind::UnexpectedEof);
+            assert!(source.read_part(100, 1).await.is_err());
+            assert_eq!(source.read_part(50, 50).await.unwrap(), data[50..]);
+        }
+    }
+
+    /// Serves one HTTP response with `status` and returns the URL to PUT to.
+    async fn mock_storage(status: u16) -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/part", listener.local_addr().unwrap());
+
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            let mut chunk = [0u8; 1024];
+
+            // read the headers and the whole body before responding
+            loop {
+                let n = socket.read(&mut chunk).await.unwrap();
+                request.extend_from_slice(&chunk[..n]);
+                let text = String::from_utf8_lossy(&request).to_lowercase();
+                if let Some(header_end) = text.find("\r\n\r\n") {
+                    let body_len = text
+                        .lines()
+                        .find_map(|l| l.strip_prefix("content-length: "))
+                        .and_then(|v| v.trim().parse::<usize>().ok())
+                        .unwrap_or(0);
+                    if request.len() >= header_end + 4 + body_len {
+                        break;
+                    }
+                }
+                if n == 0 {
+                    break;
+                }
+            }
+
+            let response =
+                format!("HTTP/1.1 {status} X\r\ncontent-length: 0\r\nconnection: close\r\n\r\n");
+            socket.write_all(response.as_bytes()).await.unwrap();
+        });
+
+        url
+    }
+
+    #[tokio::test]
+    async fn put_part_succeeds_on_2xx() {
+        let url = mock_storage(200).await;
+        let result =
+            BinaryUploader::put_part(&Client::new(), url, vec![1, 2, 3], "aGFzaA==", 1).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn put_part_reports_the_part_and_status_on_failure() {
+        let url = mock_storage(500).await;
+        let err = BinaryUploader::put_part(&Client::new(), url, vec![1, 2, 3], "aGFzaA==", 7)
+            .await
+            .unwrap_err();
+        let message = err.to_string();
+        assert!(message.contains("part 7"), "{message}");
+        assert!(message.contains("500"), "{message}");
+    }
+
+    #[tokio::test]
+    async fn put_part_reports_connection_failures() {
+        // nothing listens on port 1
+        let result = BinaryUploader::put_part(
+            &Client::new(),
+            "http://127.0.0.1:1/part".to_string(),
+            vec![1],
+            "aGFzaA==",
+            3,
+        )
+        .await;
+        assert!(result.unwrap_err().to_string().contains("part 3"));
     }
 
     #[tokio::test]
@@ -323,7 +460,7 @@ mod tests {
         let memory = UploadSource::Memory(&data);
         assert_eq!(file.len().unwrap(), memory.len().unwrap());
 
-        for start in [0u64, 1024, 4096] {
+        for start in [0u64, 1024, 3976] {
             assert_eq!(
                 file.read_part(start, 1024).await.unwrap(),
                 memory.read_part(start, 1024).await.unwrap()
