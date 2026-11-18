@@ -18,10 +18,10 @@ use std::cmp;
 use std::future::Future;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread::available_parallelism;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// The API accepts part indexes 1 through this value.
 const MAX_PARTS: u64 = 10_000;
@@ -50,26 +50,52 @@ fn part_count(file_size: u64, part_size: u64) -> Result<u64, Error> {
     Ok(parts)
 }
 
-/// Awaits `future`, giving up with `None` once `progress` has not changed for `stall`.
+/// After the last piece is handed over, the client still has to flush its buffers and wait for the
+/// response, so the stall window is this many times longer.
+const TAIL_STALL_FACTOR: u32 = 4;
+
+/// How far a part's body has been handed to the HTTP client. The client asks for the next piece
+/// only as its buffers drain, so the piece count follows the connection.
+#[derive(Default)]
+struct BodyProgress {
+    pieces: AtomicU64,
+    all_handed_over: AtomicBool,
+}
+
+/// Awaits `future`, giving up with how long nothing moved once `progress` has not changed for
+/// `stall` (`stall * TAIL_STALL_FACTOR` once the whole body has been handed over).
 async fn until_stalled<T>(
     future: impl Future<Output = T>,
-    progress: &AtomicU64,
+    progress: &BodyProgress,
     stall: Duration,
-) -> Option<T> {
+) -> Result<T, Duration> {
     tokio::pin!(future);
-    let mut last_seen = progress.load(Ordering::Relaxed);
+
+    let tick = cmp::max(stall / 4, Duration::from_millis(1));
+    let mut last_seen = progress.pieces.load(Ordering::Relaxed);
+    let mut last_change = Instant::now();
 
     loop {
-        match tokio::time::timeout(stall, &mut future).await {
-            Ok(output) => return Some(output),
+        match tokio::time::timeout(tick, &mut future).await {
+            Ok(output) => return Ok(output),
             Err(_) => {
-                let current = progress.load(Ordering::Relaxed);
+                let current = progress.pieces.load(Ordering::Relaxed);
 
-                if current == last_seen {
-                    return None;
+                if current != last_seen {
+                    last_seen = current;
+                    last_change = Instant::now();
+                    continue;
                 }
 
-                last_seen = current;
+                let allowed = if progress.all_handed_over.load(Ordering::Relaxed) {
+                    stall * TAIL_STALL_FACTOR
+                } else {
+                    stall
+                };
+
+                if last_change.elapsed() >= allowed {
+                    return Err(last_change.elapsed());
+                }
             }
         }
     }
@@ -213,6 +239,8 @@ struct ChunkUploadParams {
     pb: Arc<ProgressBar>,
     index: u64,
     chunk_data: Vec<u8>,
+    /// Total size of the binary's content.
+    content_size: u64,
 }
 
 impl Default for BinaryUploader {
@@ -335,6 +363,7 @@ impl BinaryUploader {
                         pb,
                         index,
                         chunk_data,
+                        content_size: ctx.file_size,
                     };
 
                     tokio::spawn(Self::upload_chunk(params))
@@ -362,7 +391,7 @@ impl BinaryUploader {
         // push those bytes to the server
         let create_command = binary_parts::CreateCommand {
             binary_prn: params.binary.prn.clone(),
-            expected_binary_size: params.binary.size,
+            expected_binary_size: Some(params.content_size),
             index: params.index as u16,
             hash: format!("{hash:x}"),
             api: Some(params.api.clone()),
@@ -407,19 +436,18 @@ impl BinaryUploader {
     ) -> Result<(), Error> {
         let chunk_size = chunk_data.len();
 
-        // the counter advances each time the client asks for more data, which only happens as
-        // the connection accepts what was already handed over
-        let progress = Arc::new(AtomicU64::new(0));
+        let progress = Arc::new(BodyProgress::default());
         let body = stream::unfold(
             (chunk_data, 0usize, Arc::clone(&progress)),
             |(data, position, progress)| async move {
                 if position >= data.len() {
+                    progress.all_handed_over.store(true, Ordering::Relaxed);
                     return None;
                 }
 
                 let end = cmp::min(position + BODY_PIECE_SIZE, data.len());
                 let piece = data[position..end].to_vec();
-                progress.fetch_add(1, Ordering::Relaxed);
+                progress.pieces.fetch_add(1, Ordering::Relaxed);
 
                 Some((Ok::<_, io::Error>(piece), (data, end, progress)))
             },
@@ -435,10 +463,10 @@ impl BinaryUploader {
 
         let res = until_stalled(request, &progress, stall)
             .await
-            .ok_or_else(|| Error::Generic {
+            .map_err(|idle| Error::Generic {
                 error: format!(
                     "Failed to upload binary part {index} to storage: no data moved for {} seconds. If this keeps happening on a slow connection, lower --concurrency",
-                    stall.as_secs()
+                    idle.as_secs()
                 ),
             })?
             .map_err(|e| {
@@ -600,31 +628,58 @@ mod tests {
 
     #[tokio::test]
     async fn until_stalled_gives_up_when_progress_stops() {
-        let progress = AtomicU64::new(0);
-        let result = until_stalled(
+        let progress = BodyProgress::default();
+        let idle = until_stalled(
             std::future::pending::<()>(),
             &progress,
-            Duration::from_millis(50),
+            Duration::from_millis(100),
         )
-        .await;
-        assert!(result.is_none());
+        .await
+        .unwrap_err();
+
+        // measured from the last change, so never less than the window
+        assert!(idle >= Duration::from_millis(100), "{idle:?}");
     }
 
     #[tokio::test]
     async fn until_stalled_waits_while_progress_continues() {
-        let progress = AtomicU64::new(0);
+        let progress = BodyProgress::default();
 
-        // takes about 120ms, well past the 50ms stall window, but progresses every 20ms
+        // takes about 360ms, past the 300ms stall window, but progresses every 60ms
         let slow = async {
             for _ in 0..6 {
-                tokio::time::sleep(Duration::from_millis(20)).await;
-                progress.fetch_add(1, Ordering::Relaxed);
+                tokio::time::sleep(Duration::from_millis(60)).await;
+                progress.pieces.fetch_add(1, Ordering::Relaxed);
             }
             "done"
         };
 
-        let result = until_stalled(slow, &progress, Duration::from_millis(50)).await;
-        assert_eq!(result, Some("done"));
+        let result = until_stalled(slow, &progress, Duration::from_millis(300)).await;
+        assert_eq!(result, Ok("done"));
+    }
+
+    #[tokio::test]
+    async fn until_stalled_allows_a_longer_tail_once_the_body_is_handed_over() {
+        let progress = BodyProgress::default();
+        progress.all_handed_over.store(true, Ordering::Relaxed);
+
+        // 250ms of silence is past the 100ms window but inside the 400ms tail window
+        let flushing = async {
+            tokio::time::sleep(Duration::from_millis(250)).await;
+            "done"
+        };
+        let result = until_stalled(flushing, &progress, Duration::from_millis(100)).await;
+        assert_eq!(result, Ok("done"));
+
+        // a genuinely stuck tail is still abandoned, after the longer window
+        let idle = until_stalled(
+            std::future::pending::<()>(),
+            &progress,
+            Duration::from_millis(100),
+        )
+        .await
+        .unwrap_err();
+        assert!(idle >= Duration::from_millis(400), "{idle:?}");
     }
 
     #[tokio::test]
