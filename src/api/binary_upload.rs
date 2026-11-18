@@ -62,6 +62,39 @@ struct BodyProgress {
     all_handed_over: AtomicBool,
 }
 
+/// The request error and its causes as one line. The presigned URL carries credentials, so the
+/// URL is dropped from the error and scrubbed from the text of every cause.
+fn describe_request_error(error: reqwest::Error, url: &str) -> String {
+    let mut causes = Vec::new();
+    let mut source = std::error::Error::source(&error);
+
+    while let Some(cause) = source {
+        causes.push(cause.to_string());
+        source = cause.source();
+    }
+
+    let mut text = error.without_url().to_string();
+
+    for cause in causes {
+        text.push_str(": ");
+        text.push_str(&cause);
+    }
+
+    redact_url(&text, url)
+}
+
+fn redact_url(text: &str, url: &str) -> String {
+    let mut redacted = text.replace(url, "<url>");
+
+    if let Some((_, query)) = url.split_once('?') {
+        if !query.is_empty() {
+            redacted = redacted.replace(query, "<redacted>");
+        }
+    }
+
+    redacted
+}
+
 /// Awaits `future`, giving up with how long nothing moved once `progress` has not changed for
 /// `stall` (`stall * TAIL_STALL_FACTOR` once the whole body has been handed over).
 async fn until_stalled<T>(
@@ -231,16 +264,103 @@ struct UploadContext<'a> {
     binary_parts: &'a [ListBinaryPart],
 }
 
-struct ChunkUploadParams {
-    binary: Binary,
-    api: Api,
-    global_options: GlobalOptions,
+/// A part to register with the API before its data is sent to storage.
+struct NewPart {
+    index: u64,
+    /// Lowercase hex SHA-256 of the part's data.
+    hash: String,
+    size: u64,
+}
+
+/// What `upload_part` needs to read and send one part, independent of the Peridio API.
+struct PartUploadPlan<'a> {
+    source: &'a UploadSource<'a>,
+    binary_parts: &'a [ListBinaryPart],
+    part_size: u64,
+    file_size: u64,
+    client: &'a Client,
+}
+
+/// Uploads part `index`, unless it is already valid. `create_part` registers the part with the
+/// API and returns the presigned URL to send its data to.
+async fn upload_part<C, Fut>(
+    plan: &PartUploadPlan<'_>,
+    pb: Arc<ProgressBar>,
+    index: u64,
+    create_part: C,
+) -> Result<(), Error>
+where
+    C: FnOnce(NewPart) -> Fut + Send + 'static,
+    Fut: Future<Output = Result<Option<String>, Error>> + Send + 'static,
+{
+    // parts that are already uploaded and valid are skipped
+    if let Some(binary_part) = plan.binary_parts.iter().find(|x| x.index as u64 == index) {
+        if matches!(binary_part.state, BinaryPartState::Valid) {
+            pb.inc(binary_part.size);
+            return Ok(());
+        }
+    }
+
+    let start_pos = plan.part_size * (index - 1);
+    let part_len = cmp::min(plan.part_size, plan.file_size - start_pos);
+
+    let chunk_data = plan
+        .source
+        .read_part(start_pos, part_len)
+        .await
+        .map_err(|e| Error::Generic {
+            error: format!("Failed to read binary part {index}: {e}"),
+        })?;
+
+    tokio::spawn(upload_chunk(
+        plan.client.clone(),
+        pb,
+        index,
+        chunk_data,
+        create_part,
+    ))
+    .await
+    .map_err(|e| Error::Generic {
+        error: format!("Upload task for binary part {index} failed: {e}"),
+    })?
+}
+
+async fn upload_chunk<C, Fut>(
     client: Client,
     pb: Arc<ProgressBar>,
     index: u64,
     chunk_data: Vec<u8>,
-    /// Total size of the binary's content.
-    content_size: u64,
+    create_part: C,
+) -> Result<(), Error>
+where
+    C: FnOnce(NewPart) -> Fut,
+    Fut: Future<Output = Result<Option<String>, Error>>,
+{
+    let chunk_size = chunk_data.len();
+    let mut hasher = Sha256::new();
+    hasher.update(&chunk_data);
+    let hash = hasher.finalize();
+
+    let url = create_part(NewPart {
+        index,
+        hash: format!("{hash:x}"),
+        size: chunk_size as u64,
+    })
+    .await
+    .map_err(|e| Error::Generic {
+        error: format!("Failed to create binary part {index}: {e}"),
+    })?
+    .ok_or_else(|| Error::Generic {
+        error: format!("Cannot create binary part {index}"),
+    })?;
+
+    let hash_base64 = general_purpose::STANDARD.encode(hash);
+
+    BinaryUploader::put_part(&client, url, chunk_data, &hash_base64, index, STALL_TIMEOUT).await?;
+
+    pb.inc(chunk_size as u64);
+
+    Ok(())
 }
 
 impl Default for BinaryUploader {
@@ -327,103 +447,49 @@ impl BinaryUploader {
             .with_key("eta", |state: &ProgressState, w: &mut dyn std::fmt::Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
             .progress_chars("#>-"));
 
+        let plan = PartUploadPlan {
+            source: &ctx.source,
+            binary_parts: ctx.binary_parts,
+            part_size: self.binary_part_size,
+            file_size: ctx.file_size,
+            client: ctx.client,
+        };
+        let plan = &plan;
         let ctx = &ctx;
 
         let result = run_parts(ctx.chunks_length, self.concurrency.into(), |index| {
-            let pb = Arc::clone(&pb);
+            let binary = ctx.binary.clone();
+            let api = ctx.api.clone();
+            let global_options = ctx.global_options.clone();
+            let content_size = ctx.file_size;
 
-            async move {
-                {
-                    // parts that are already uploaded and valid are skipped
-                    if let Some(binary_part) =
-                        ctx.binary_parts.iter().find(|x| x.index as u64 == index)
-                    {
-                        if matches!(binary_part.state, BinaryPartState::Valid) {
-                            pb.inc(binary_part.size);
-                            return Ok(());
-                        }
-                    }
-
-                    let start_pos = self.binary_part_size * (index - 1);
-                    let part_len = cmp::min(self.binary_part_size, ctx.file_size - start_pos);
-
-                    let chunk_data =
-                        ctx.source
-                            .read_part(start_pos, part_len)
-                            .await
-                            .map_err(|e| Error::Generic {
-                                error: format!("Failed to read binary part {index}: {e}"),
-                            })?;
-
-                    let params = ChunkUploadParams {
-                        binary: ctx.binary.clone(),
-                        api: ctx.api.clone(),
-                        global_options: ctx.global_options.clone(),
-                        client: ctx.client.clone(),
-                        pb,
-                        index,
-                        chunk_data,
-                        content_size: ctx.file_size,
+            upload_part(
+                plan,
+                Arc::clone(&pb),
+                index,
+                move |part: NewPart| async move {
+                    let command = binary_parts::CreateCommand {
+                        binary_prn: binary.prn,
+                        expected_binary_size: Some(content_size),
+                        index: part.index as u16,
+                        hash: part.hash,
+                        api: Some(api),
+                        size: part.size,
+                        binary_content_path: None,
                     };
 
-                    tokio::spawn(Self::upload_chunk(params))
-                        .await
-                        .map_err(|e| Error::Generic {
-                            error: format!("Upload task for binary part {index} failed: {e}"),
-                        })?
-                }
-            }
+                    Ok(command
+                        .run(global_options)
+                        .await?
+                        .map(|created| created.binary_part.presigned_upload_url))
+                },
+            )
         })
         .await;
 
         pb.finish_and_clear();
 
         result
-    }
-
-    async fn upload_chunk(params: ChunkUploadParams) -> Result<(), Error> {
-        let index = params.index;
-        let chunk_size = params.chunk_data.len();
-        let mut hasher = Sha256::new();
-        hasher.update(&params.chunk_data);
-        let hash = hasher.finalize();
-
-        // push those bytes to the server
-        let create_command = binary_parts::CreateCommand {
-            binary_prn: params.binary.prn.clone(),
-            expected_binary_size: Some(params.content_size),
-            index: params.index as u16,
-            hash: format!("{hash:x}"),
-            api: Some(params.api.clone()),
-            size: chunk_size as u64,
-            binary_content_path: None,
-        };
-
-        let bin_part = create_command
-            .run(params.global_options)
-            .await
-            .map_err(|e| Error::Generic {
-                error: format!("Failed to create binary part {index}: {e}"),
-            })?
-            .ok_or_else(|| Error::Generic {
-                error: format!("Cannot create binary part {index}"),
-            })?;
-
-        let hash_base64 = general_purpose::STANDARD.encode(hash);
-
-        Self::put_part(
-            &params.client,
-            bin_part.binary_part.presigned_upload_url,
-            params.chunk_data,
-            &hash_base64,
-            index,
-            STALL_TIMEOUT,
-        )
-        .await?;
-
-        params.pb.inc(chunk_size as u64);
-
-        Ok(())
     }
 
     async fn put_part(
@@ -454,7 +520,7 @@ impl BinaryUploader {
         );
 
         let request = client
-            .put(url)
+            .put(&url)
             .body(Body::wrap_stream(body))
             .header("x-amz-checksum-sha256", hash_base64)
             .header("content-length", chunk_size)
@@ -470,7 +536,6 @@ impl BinaryUploader {
                 ),
             })?
             .map_err(|e| {
-                // the presigned URL carries credentials, so it is kept out of the message
                 let reason = if e.is_timeout() {
                     "timed out"
                 } else if e.is_connect() {
@@ -482,7 +547,7 @@ impl BinaryUploader {
                 Error::Generic {
                     error: format!(
                         "Failed to upload binary part {index} to storage: {reason} ({})",
-                        e.without_url()
+                        describe_request_error(e, &url)
                     ),
                 }
             })?;
@@ -645,10 +710,10 @@ mod tests {
     async fn until_stalled_waits_while_progress_continues() {
         let progress = BodyProgress::default();
 
-        // takes about 360ms, past the 300ms stall window, but progresses every 60ms
+        // takes about 400ms, past the 300ms stall window, but progresses every 20ms
         let slow = async {
-            for _ in 0..6 {
-                tokio::time::sleep(Duration::from_millis(60)).await;
+            for _ in 0..20 {
+                tokio::time::sleep(Duration::from_millis(20)).await;
                 progress.pieces.fetch_add(1, Ordering::Relaxed);
             }
             "done"
@@ -746,6 +811,203 @@ mod tests {
     }
 
     const TEST_STALL: Duration = Duration::from_secs(10);
+
+    fn listed(index: u16, state: BinaryPartState, size: u64) -> ListBinaryPart {
+        ListBinaryPart {
+            binary_prn: None,
+            hash: "hash".to_string(),
+            index,
+            inserted_at: String::new(),
+            organization_prn: String::new(),
+            prn: String::new(),
+            size,
+            state,
+            updated_at: String::new(),
+        }
+    }
+
+    fn hidden_progress() -> Arc<ProgressBar> {
+        Arc::new(ProgressBar::hidden())
+    }
+
+    #[test]
+    fn redact_url_scrubs_the_url_and_its_query() {
+        let url = "https://bucket.example/obj?X-Amz-Signature=secret&partNumber=1";
+
+        assert_eq!(
+            redact_url(&format!("failed for {url}"), url),
+            "failed for <url>"
+        );
+        assert_eq!(
+            redact_url("bad query X-Amz-Signature=secret&partNumber=1 here", url),
+            "bad query <redacted> here"
+        );
+        assert_eq!(redact_url("no secrets", "https://host/obj"), "no secrets");
+    }
+
+    #[tokio::test]
+    async fn upload_chunk_registers_then_sends_the_part_and_counts_it() {
+        use sha2::Digest;
+
+        let data = sample(2_000);
+        let expected_hash = format!("{:x}", Sha256::digest(&data));
+        let (url, server) = mock_storage(Some(200)).await;
+        let pb = hidden_progress();
+
+        let result = upload_chunk(Client::new(), Arc::clone(&pb), 3, data.clone(), {
+            let expected_hash = expected_hash.clone();
+            move |part: NewPart| async move {
+                assert_eq!(part.index, 3);
+                assert_eq!(part.size, 2_000);
+                assert_eq!(part.hash, expected_hash);
+                Ok(Some(url))
+            }
+        })
+        .await;
+
+        assert!(result.is_ok());
+        assert_eq!(pb.position(), 2_000);
+
+        let request = server.await.unwrap();
+        let header_end = request.windows(4).position(|w| w == b"\r\n\r\n").unwrap() + 4;
+        assert_eq!(&request[header_end..], &data[..]);
+    }
+
+    #[tokio::test]
+    async fn upload_chunk_reports_a_failed_create_without_sending_or_counting() {
+        let pb = hidden_progress();
+
+        let err = upload_chunk(
+            Client::new(),
+            Arc::clone(&pb),
+            3,
+            vec![1, 2, 3],
+            |_| async {
+                Err(Error::Generic {
+                    error: "denied".to_string(),
+                })
+            },
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+
+        assert!(err.contains("Failed to create binary part 3"), "{err}");
+        assert!(err.contains("denied"), "{err}");
+        assert_eq!(pb.position(), 0);
+
+        let err = upload_chunk(Client::new(), Arc::clone(&pb), 4, vec![1], |_| async {
+            Ok(None)
+        })
+        .await
+        .unwrap_err()
+        .to_string();
+
+        assert!(err.contains("Cannot create binary part 4"), "{err}");
+        assert_eq!(pb.position(), 0);
+    }
+
+    #[tokio::test]
+    async fn upload_chunk_fails_and_does_not_count_a_rejected_put() {
+        let (url, _server) = mock_storage(Some(500)).await;
+        let pb = hidden_progress();
+
+        let err = upload_chunk(
+            Client::new(),
+            Arc::clone(&pb),
+            5,
+            vec![1, 2, 3],
+            |_| async { Ok(Some(url)) },
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+
+        assert!(err.contains("part 5") && err.contains("500"), "{err}");
+        assert_eq!(pb.position(), 0);
+    }
+
+    #[tokio::test]
+    async fn upload_part_skips_a_valid_part_without_reading_or_creating() {
+        let data = sample(10);
+        let source = UploadSource::Memory(&data);
+        let parts = [listed(1, BinaryPartState::Valid, 4)];
+        let client = Client::new();
+        let plan = PartUploadPlan {
+            source: &source,
+            binary_parts: &parts,
+            part_size: 4,
+            file_size: 10,
+            client: &client,
+        };
+        let pb = hidden_progress();
+
+        let result = upload_part(&plan, Arc::clone(&pb), 1, |_| async {
+            Err(Error::Generic {
+                error: "must not be called".to_string(),
+            })
+        })
+        .await;
+
+        assert!(result.is_ok());
+        assert_eq!(pb.position(), 4);
+    }
+
+    #[tokio::test]
+    async fn upload_part_sends_only_its_own_range() {
+        let data = sample(10);
+        let source = UploadSource::Memory(&data);
+        // part 3 is not valid; part 1 being valid must not affect it
+        let parts = [
+            listed(1, BinaryPartState::Valid, 4),
+            listed(3, BinaryPartState::InvalidHash, 2),
+        ];
+        let client = Client::new();
+        let plan = PartUploadPlan {
+            source: &source,
+            binary_parts: &parts,
+            part_size: 4,
+            file_size: 10,
+            client: &client,
+        };
+        let (url, server) = mock_storage(Some(200)).await;
+        let pb = hidden_progress();
+
+        let result = upload_part(&plan, Arc::clone(&pb), 3, move |part: NewPart| async move {
+            assert_eq!(part.size, 2);
+            Ok(Some(url))
+        })
+        .await;
+
+        assert!(result.is_ok());
+        assert_eq!(pb.position(), 2);
+
+        let request = server.await.unwrap();
+        let header_end = request.windows(4).position(|w| w == b"\r\n\r\n").unwrap() + 4;
+        assert_eq!(&request[header_end..], &data[8..10]);
+    }
+
+    #[tokio::test]
+    async fn upload_part_reports_an_unreadable_part() {
+        let source = UploadSource::File(Path::new("/nonexistent/peridio-test-file"));
+        let client = Client::new();
+        let plan = PartUploadPlan {
+            source: &source,
+            binary_parts: &[],
+            part_size: 4,
+            file_size: 4,
+            client: &client,
+        };
+
+        let err = upload_part(&plan, hidden_progress(), 1, |_| async {
+            Ok(Some("http://127.0.0.1:1/unused".to_string()))
+        })
+        .await
+        .unwrap_err()
+        .to_string();
+
+        assert!(err.contains("Failed to read binary part 1"), "{err}");
+    }
 
     #[tokio::test]
     async fn put_part_succeeds_on_2xx() {
@@ -849,6 +1111,7 @@ mod tests {
         let message = result.unwrap_err().to_string();
         assert!(message.contains("part 3"), "{message}");
         assert!(message.contains("could not connect"), "{message}");
+        assert!(message.to_lowercase().contains("refused"), "{message}");
         assert!(!message.contains("secret"), "{message}");
         assert!(!message.contains("127.0.0.1"), "{message}");
     }
