@@ -15,7 +15,8 @@ use reqwest::Body;
 use reqwest::Client;
 use sha2::{Digest, Sha256};
 use std::cmp;
-use std::io;
+use std::io::{self, Read, Seek, SeekFrom};
+use std::path::Path;
 use std::sync::Arc;
 use std::thread::available_parallelism;
 
@@ -24,11 +25,52 @@ pub struct BinaryUploader {
     concurrency: u8,
 }
 
+/// Where binary content is read from. Parts are read on demand.
+pub enum UploadSource<'a> {
+    /// Content on disk; each part is read with its own open + seek.
+    File(&'a Path),
+    /// Content already held in memory; only the requested range is copied.
+    Memory(&'a [u8]),
+}
+
+impl UploadSource<'_> {
+    pub fn len(&self) -> io::Result<u64> {
+        match self {
+            UploadSource::File(path) => Ok(std::fs::metadata(path)?.len()),
+            UploadSource::Memory(content) => Ok(content.len() as u64),
+        }
+    }
+
+    /// Reads the bytes in `start..start + len` (fewer if the source ends first).
+    pub async fn read_part(&self, start: u64, len: u64) -> io::Result<Vec<u8>> {
+        match self {
+            UploadSource::File(path) => {
+                let path = path.to_path_buf();
+                tokio::task::spawn_blocking(move || {
+                    // a separate handle per part avoids racing on a shared seek position
+                    let mut file = std::fs::File::open(path)?;
+                    file.seek(SeekFrom::Start(start))?;
+                    let mut buffer = Vec::with_capacity(len as usize);
+                    file.take(len).read_to_end(&mut buffer)?;
+                    Ok(buffer)
+                })
+                .await
+                .map_err(io::Error::other)?
+            }
+            UploadSource::Memory(content) => {
+                let start = cmp::min(start as usize, content.len());
+                let end = cmp::min(start.saturating_add(len as usize), content.len());
+                Ok(content[start..end].to_vec())
+            }
+        }
+    }
+}
+
 struct UploadContext<'a> {
     binary: &'a Binary,
     api: &'a Api,
     global_options: GlobalOptions,
-    content: &'a [u8],
+    source: UploadSource<'a>,
     file_size: u64,
     chunks_length: u64,
     client: &'a Client,
@@ -71,15 +113,21 @@ impl BinaryUploader {
         self
     }
 
-    /// Upload binary content from memory
-    pub async fn upload_from_memory(
+    /// Uploads `source` as binary parts, skipping parts that are already `Valid`.
+    ///
+    /// Binaries can be multiple GB. Parts are read on demand, so memory stays near
+    /// `concurrency * part_size`. Do not buffer or copy the whole source; pass
+    /// `UploadSource::File` for on-disk content.
+    pub async fn upload(
         &self,
         binary: &Binary,
         api: &Api,
         global_options: GlobalOptions,
-        content: &[u8],
+        source: UploadSource<'_>,
     ) -> Result<(), Error> {
-        let file_size = content.len() as u64;
+        let file_size = source.len().map_err(|e| Error::Generic {
+            error: format!("Failed to determine binary content size: {e}"),
+        })?;
         let chunks_length = file_size.div_ceil(self.binary_part_size);
 
         let client = Client::new();
@@ -89,17 +137,17 @@ impl BinaryUploader {
             binary,
             api,
             global_options,
-            content,
+            source,
             file_size,
             chunks_length,
             client: &client,
             binary_parts: &binary_parts,
         };
 
-        self.upload_binary_parts_from_memory(ctx).await
+        self.upload_binary_parts(ctx).await
     }
 
-    async fn upload_binary_parts_from_memory(&self, ctx: UploadContext<'_>) -> Result<(), Error> {
+    async fn upload_binary_parts(&self, ctx: UploadContext<'_>) -> Result<(), Error> {
         eprintln!("Creating binary parts and uploading...");
         let pb = Arc::new(ProgressBar::new(ctx.file_size));
         pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
@@ -107,61 +155,65 @@ impl BinaryUploader {
             .with_key("eta", |state: &ProgressState, w: &mut dyn std::fmt::Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
             .progress_chars("#>-"));
 
-        // Convert content to Arc for sharing across threads
-        let content = Arc::new(ctx.content.to_vec());
+        let ctx = &ctx;
 
-        let result = stream::iter(1..=ctx.chunks_length)
+        let results = stream::iter(1..=ctx.chunks_length)
             .map(|index| {
-                let binary_part_size = self.binary_part_size;
-                let content = Arc::clone(&content);
-                let binary_parts = ctx.binary_parts.to_vec();
                 let pb = Arc::clone(&pb);
 
-                let params = ChunkUploadParams {
-                    binary: ctx.binary.clone(),
-                    api: ctx.api.clone(),
-                    global_options: ctx.global_options.clone(),
-                    client: ctx.client.clone(),
-                    pb: Arc::clone(&pb),
-                    index,
-                    chunk_data: Vec::new(), // Will be filled below
-                };
-
-                tokio::spawn(async move {
+                async move {
                     // we ignore the ones we already created
-                    if let Some(binary_part) = binary_parts.iter().find(|x| x.index as u64 == index)
+                    if let Some(binary_part) =
+                        ctx.binary_parts.iter().find(|x| x.index as u64 == index)
                     {
                         if matches!(binary_part.state, BinaryPartState::Valid) {
                             pb.inc(binary_part.size);
-                            return;
+                            return Ok(());
                         }
                     }
 
-                    let start_pos = (binary_part_size * (index - 1)) as usize;
-                    let end_pos =
-                        std::cmp::min(start_pos + binary_part_size as usize, content.len());
+                    let start_pos = self.binary_part_size * (index - 1);
+                    let part_len = cmp::min(self.binary_part_size, ctx.file_size - start_pos);
 
-                    if start_pos < content.len() {
-                        let chunk = content[start_pos..end_pos].to_vec();
-                        let mut params = params;
-                        params.chunk_data = chunk.clone();
+                    let chunk_data =
+                        ctx.source
+                            .read_part(start_pos, part_len)
+                            .await
+                            .map_err(|e| Error::Generic {
+                                error: format!("Failed to read binary part {index}: {e}"),
+                            })?;
 
-                        Self::upload_chunk(params).await;
-                    }
-                })
+                    let params = ChunkUploadParams {
+                        binary: ctx.binary.clone(),
+                        api: ctx.api.clone(),
+                        global_options: ctx.global_options.clone(),
+                        client: ctx.client.clone(),
+                        pb,
+                        index,
+                        chunk_data,
+                    };
+
+                    tokio::spawn(Self::upload_chunk(params))
+                        .await
+                        .map_err(|e| Error::Generic {
+                            error: format!("Upload task for binary part {index} failed: {e}"),
+                        })?
+                }
             })
-            .buffer_unordered(self.concurrency.into());
+            .buffer_unordered(self.concurrency.into())
+            .collect::<Vec<Result<(), Error>>>()
+            .await;
 
-        let _ = result.collect::<Vec<_>>().await;
         pb.finish_and_clear();
 
-        Ok(())
+        results.into_iter().collect()
     }
 
-    async fn upload_chunk(params: ChunkUploadParams) {
+    async fn upload_chunk(params: ChunkUploadParams) -> Result<(), Error> {
+        let index = params.index;
         let chunk_size = params.chunk_data.len();
         let mut hasher = Sha256::new();
-        let _ = io::copy(&mut &params.chunk_data[..], &mut hasher).unwrap();
+        hasher.update(&params.chunk_data);
         let hash = hasher.finalize();
 
         // push those bytes to the server
@@ -177,9 +229,10 @@ impl BinaryUploader {
 
         let bin_part = create_command
             .run(params.global_options)
-            .await
-            .expect("Error while creating a binary part binary part")
-            .expect("Cannot create a binary part");
+            .await?
+            .ok_or_else(|| Error::Generic {
+                error: format!("Cannot create binary part {index}"),
+            })?;
 
         // do amazon request
         let body = Body::from(params.chunk_data);
@@ -195,13 +248,22 @@ impl BinaryUploader {
             .header("content-type", "application/octet-stream")
             .send()
             .await
-            .unwrap();
-
-        params.pb.inc(chunk_size.try_into().unwrap());
+            .map_err(|e| Error::Generic {
+                error: format!("Failed to upload binary part {index} to storage: {e}"),
+            })?;
 
         if !(200..=201).contains(&res.status().as_u16()) {
-            panic!("Wasn't able to upload binary to amazon S3")
-        };
+            return Err(Error::Generic {
+                error: format!(
+                    "Failed to upload binary part {index} to storage (HTTP {})",
+                    res.status()
+                ),
+            });
+        }
+
+        params.pb.inc(chunk_size as u64);
+
+        Ok(())
     }
 
     async fn get_binary_parts(
@@ -221,5 +283,58 @@ impl BinaryUploader {
         };
 
         Ok(binary_parts)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    fn sample(len: usize) -> Vec<u8> {
+        (0..len).map(|i| (i % 251) as u8).collect()
+    }
+
+    #[tokio::test]
+    async fn file_read_part_is_bounded_by_part_len() {
+        let data = sample(10_000);
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        tmp.write_all(&data).unwrap();
+
+        let source = UploadSource::File(tmp.path());
+        assert_eq!(source.len().unwrap(), 10_000);
+
+        // first, middle, and short last part
+        for (start, len, expected_len) in [(0, 4096, 4096), (4096, 4096, 4096), (8192, 4096, 1808)]
+        {
+            let part = source.read_part(start, len).await.unwrap();
+            assert_eq!(part.len(), expected_len);
+            assert_eq!(part, data[start as usize..start as usize + expected_len]);
+        }
+    }
+
+    #[tokio::test]
+    async fn memory_and_file_sources_agree() {
+        let data = sample(5_000);
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        tmp.write_all(&data).unwrap();
+
+        let file = UploadSource::File(tmp.path());
+        let memory = UploadSource::Memory(&data);
+        assert_eq!(file.len().unwrap(), memory.len().unwrap());
+
+        for start in [0u64, 1024, 4096] {
+            assert_eq!(
+                file.read_part(start, 1024).await.unwrap(),
+                memory.read_part(start, 1024).await.unwrap()
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn missing_file_is_an_error() {
+        let source = UploadSource::File(Path::new("/nonexistent/peridio-test-file"));
+        assert!(source.len().is_err());
+        assert!(source.read_part(0, 10).await.is_err());
     }
 }

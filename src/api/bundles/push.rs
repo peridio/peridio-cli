@@ -1,5 +1,6 @@
 use super::super::binary_processor::{BinaryProcessor, BinaryProcessorConfig, SignatureConfig};
 
+use super::super::binary_upload::UploadSource;
 use super::super::Command;
 
 use crate::utils::PRNBuilder;
@@ -696,7 +697,7 @@ impl PushCommand {
 
                 let processor = BinaryProcessor::new(config);
                 let processed_binary = processor
-                    .process_binary(&binary, api, Some(binary_content))
+                    .process_binary(&binary, api, Some(UploadSource::Memory(binary_content)))
                     .await?;
 
                 eprintln!(
@@ -959,7 +960,7 @@ impl PushCommand {
 
         let processor = BinaryProcessor::new(config);
         let processed_binary = processor
-            .process_binary(binary, api, Some(binary_content))
+            .process_binary(binary, api, Some(UploadSource::Memory(binary_content)))
             .await?;
 
         Ok(processed_binary.prn)
