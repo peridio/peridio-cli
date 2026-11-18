@@ -83,16 +83,49 @@ fn describe_request_error(error: reqwest::Error, url: &str) -> String {
     redact_url(&text, url)
 }
 
+/// Replaces `url`, and its query string wherever it appears alone, in `text`. The percent-decoded
+/// form of the URL is scrubbed as well, since a cause may print it unescaped.
 fn redact_url(text: &str, url: &str) -> String {
-    let mut redacted = text.replace(url, "<url>");
+    let decoded = percent_decode(url);
+    let mut redacted = text.to_string();
 
-    if let Some((_, query)) = url.split_once('?') {
-        if !query.is_empty() {
-            redacted = redacted.replace(query, "<redacted>");
+    for candidate in [url, decoded.as_str()] {
+        redacted = redacted.replace(candidate, "<url>");
+
+        if let Some((_, query)) = candidate.split_once('?') {
+            if !query.is_empty() {
+                redacted = redacted.replace(query, "<redacted>");
+            }
         }
     }
 
     redacted
+}
+
+fn percent_decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+
+    while index < bytes.len() {
+        let escaped = (bytes[index] == b'%' && index + 2 < bytes.len())
+            .then(|| std::str::from_utf8(&bytes[index + 1..index + 3]).ok())
+            .flatten()
+            .and_then(|hex| u8::from_str_radix(hex, 16).ok());
+
+        match escaped {
+            Some(byte) => {
+                decoded.push(byte);
+                index += 3;
+            }
+            None => {
+                decoded.push(bytes[index]);
+                index += 1;
+            }
+        }
+    }
+
+    String::from_utf8_lossy(&decoded).into_owned()
 }
 
 /// Awaits `future`, giving up with how long nothing moved once `progress` has not changed for
@@ -845,6 +878,38 @@ mod tests {
         assert_eq!(redact_url("no secrets", "https://host/obj"), "no secrets");
     }
 
+    #[test]
+    fn redact_url_scrubs_percent_encoded_and_decoded_forms() {
+        let url = "https://bucket.example/obj?X-Amz-Credential=AKIA%2F20260101%2Fus-east-1&X-Amz-Signature=secret";
+
+        // the URL as given
+        assert_eq!(
+            redact_url(&format!("failed for {url}"), url),
+            "failed for <url>"
+        );
+
+        // a cause that prints the URL with its escapes resolved
+        let decoded = "https://bucket.example/obj?X-Amz-Credential=AKIA/20260101/us-east-1&X-Amz-Signature=secret";
+        let message = redact_url(&format!("failed for {decoded}"), url);
+        assert_eq!(message, "failed for <url>");
+
+        // only the decoded query string
+        let message = redact_url(
+            "bad X-Amz-Credential=AKIA/20260101/us-east-1&X-Amz-Signature=secret here",
+            url,
+        );
+        assert_eq!(message, "bad <redacted> here");
+        assert!(!message.contains("secret"));
+    }
+
+    #[test]
+    fn percent_decode_resolves_valid_escapes_only() {
+        assert_eq!(percent_decode("a%2Fb%20c"), "a/b c");
+        assert_eq!(percent_decode("100%"), "100%");
+        assert_eq!(percent_decode("bad%zzescape%2"), "bad%zzescape%2");
+        assert_eq!(percent_decode("plain"), "plain");
+    }
+
     #[tokio::test]
     async fn upload_chunk_registers_then_sends_the_part_and_counts_it() {
         use sha2::Digest;
@@ -928,7 +993,42 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn upload_part_skips_a_valid_part_without_reading_or_creating() {
+    async fn upload_part_skips_a_valid_part_without_reading_it() {
+        // the file does not exist, so any read of the source would fail the upload
+        let source = UploadSource::File(Path::new("/nonexistent/peridio-test-file"));
+        let parts = [listed(1, BinaryPartState::Valid, 4)];
+        let client = Client::new();
+        let plan = PartUploadPlan {
+            source: &source,
+            binary_parts: &parts,
+            part_size: 4,
+            file_size: 10,
+            client: &client,
+        };
+        let pb = hidden_progress();
+
+        let result = upload_part(&plan, Arc::clone(&pb), 1, |_| async {
+            Err(Error::Generic {
+                error: "must not be called".to_string(),
+            })
+        })
+        .await;
+
+        assert!(result.is_ok(), "{result:?}");
+        assert_eq!(pb.position(), 4);
+
+        // a part that is not valid does read the source, and fails because it is missing
+        let err = upload_part(&plan, Arc::clone(&pb), 2, |_| async {
+            Ok(Some("http://127.0.0.1:1/unused".to_string()))
+        })
+        .await
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("Failed to read binary part 2"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn upload_part_skips_a_valid_part_without_creating_it() {
         let data = sample(10);
         let source = UploadSource::Memory(&data);
         let parts = [listed(1, BinaryPartState::Valid, 4)];
