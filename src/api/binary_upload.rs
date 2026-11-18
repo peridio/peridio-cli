@@ -555,6 +555,12 @@ impl BinaryUploader {
                 let piece = data[position..end].to_vec();
                 progress.pieces.fetch_add(1, Ordering::Relaxed);
 
+                // With a declared `content-length` the client may not poll again after the
+                // last piece, so the flag is set when that piece is handed over
+                if end == data.len() {
+                    progress.all_handed_over.store(true, Ordering::Relaxed);
+                }
+
                 Some((Ok::<_, io::Error>(piece), (data, end, progress)))
             },
         );
@@ -804,6 +810,14 @@ mod tests {
     /// Accepts one request and answers it with `status`, or never answers when `None`. Returns
     /// the URL to PUT to and a handle that yields the raw request once it has been read.
     async fn mock_storage(status: Option<u16>) -> (String, tokio::task::JoinHandle<Vec<u8>>) {
+        mock_storage_after(status, Duration::ZERO).await
+    }
+
+    /// Like `mock_storage`, but waits `delay` after reading the whole request before answering.
+    async fn mock_storage_after(
+        status: Option<u16>,
+        delay: Duration,
+    ) -> (String, tokio::task::JoinHandle<Vec<u8>>) {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -836,6 +850,7 @@ mod tests {
 
             match status {
                 Some(status) => {
+                    tokio::time::sleep(delay).await;
                     let response = format!(
                         "HTTP/1.1 {status} X\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
                     );
@@ -1194,6 +1209,44 @@ mod tests {
         let message = err.to_string();
         assert!(message.contains("part 7"), "{message}");
         assert!(message.contains("500"), "{message}");
+    }
+
+    #[tokio::test]
+    async fn put_part_allows_a_slow_response_after_the_whole_part_is_sent() {
+        // several pieces, so the last piece is not the first
+        let data = sample(2 * BODY_PIECE_SIZE + 5);
+
+        // storage answers 250ms after the whole request arrived: past the 100ms stall window,
+        // inside the 400ms tail window that applies once the whole part has been handed over
+        let (url, _server) = mock_storage_after(Some(200), Duration::from_millis(250)).await;
+        let result = BinaryUploader::put_part(
+            &Client::new(),
+            url,
+            data.clone(),
+            "aGFzaA==",
+            1,
+            Duration::from_millis(100),
+        )
+        .await;
+        assert!(result.is_ok(), "{result:?}");
+
+        // a response slower than the tail window is still abandoned
+        let (url, _server) = mock_storage_after(Some(200), Duration::from_millis(900)).await;
+        let err = BinaryUploader::put_part(
+            &Client::new(),
+            url,
+            data,
+            "aGFzaA==",
+            2,
+            Duration::from_millis(100),
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+        assert!(
+            err.contains("part 2") && err.contains("no data moved"),
+            "{err}"
+        );
     }
 
     #[tokio::test]
