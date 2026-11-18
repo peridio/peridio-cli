@@ -19,6 +19,67 @@ use std::io::{self, Read, Seek, SeekFrom};
 use std::path::Path;
 use std::sync::Arc;
 use std::thread::available_parallelism;
+use std::time::Duration;
+
+/// The API accepts part indexes 1 through this value.
+const MAX_PARTS: u64 = 10_000;
+
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// A part upload is abandoned after this plus the time to send the part at
+/// `MIN_UPLOAD_BYTES_PER_SEC`.
+const UPLOAD_TIMEOUT_BASE: Duration = Duration::from_secs(60);
+const MIN_UPLOAD_BYTES_PER_SEC: u64 = 128 * 1024;
+
+/// Number of parts needed for `file_size`, or an error when it exceeds the API's part limit.
+fn part_count(file_size: u64, part_size: u64) -> Result<u64, Error> {
+    let parts = file_size.div_ceil(part_size);
+
+    if parts > MAX_PARTS {
+        return Err(Error::Generic {
+            error: format!(
+                "Binary content of {file_size} bytes needs {parts} parts at a part size of {part_size} bytes, but at most {MAX_PARTS} are allowed; pass --binary-part-size {} or larger",
+                file_size.div_ceil(MAX_PARTS)
+            ),
+        });
+    }
+
+    Ok(parts)
+}
+
+fn upload_timeout(part_len: usize) -> Duration {
+    UPLOAD_TIMEOUT_BASE + Duration::from_secs(part_len as u64 / MIN_UPLOAD_BYTES_PER_SEC)
+}
+
+/// Reports every failed part, so a user can tell one failure from many.
+fn summarize_failures(total_parts: u64, mut failures: Vec<(u64, Error)>) -> Result<(), Error> {
+    if failures.is_empty() {
+        return Ok(());
+    }
+
+    const LISTED: usize = 20;
+
+    failures.sort_by_key(|(index, _)| *index);
+
+    let mut listed = failures
+        .iter()
+        .take(LISTED)
+        .map(|(index, _)| index.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    if failures.len() > LISTED {
+        listed.push_str(&format!(", and {} more", failures.len() - LISTED));
+    }
+
+    Err(Error::Generic {
+        error: format!(
+            "{} of {total_parts} binary parts failed to upload (parts: {listed}). First error: {}. Rerun the command to resume the upload.",
+            failures.len(),
+            failures[0].1
+        ),
+    })
+}
 
 pub struct BinaryUploader {
     binary_part_size: u64,
@@ -157,9 +218,14 @@ impl BinaryUploader {
             }
         }
 
-        let chunks_length = file_size.div_ceil(self.binary_part_size);
+        let chunks_length = part_count(file_size, self.binary_part_size)?;
 
-        let client = Client::new();
+        let client = Client::builder()
+            .connect_timeout(CONNECT_TIMEOUT)
+            .build()
+            .map_err(|e| Error::Generic {
+                error: format!("Failed to create HTTP client: {e}"),
+            })?;
         let binary_parts = self.get_binary_parts(binary, api, &global_options).await?;
 
         let ctx = UploadContext {
@@ -191,51 +257,61 @@ impl BinaryUploader {
                 let pb = Arc::clone(&pb);
 
                 async move {
-                    // parts that are already uploaded and valid are skipped
-                    if let Some(binary_part) =
-                        ctx.binary_parts.iter().find(|x| x.index as u64 == index)
-                    {
-                        if matches!(binary_part.state, BinaryPartState::Valid) {
-                            pb.inc(binary_part.size);
-                            return Ok(());
+                    let result = async {
+                        // parts that are already uploaded and valid are skipped
+                        if let Some(binary_part) =
+                            ctx.binary_parts.iter().find(|x| x.index as u64 == index)
+                        {
+                            if matches!(binary_part.state, BinaryPartState::Valid) {
+                                pb.inc(binary_part.size);
+                                return Ok(());
+                            }
                         }
-                    }
 
-                    let start_pos = self.binary_part_size * (index - 1);
-                    let part_len = cmp::min(self.binary_part_size, ctx.file_size - start_pos);
+                        let start_pos = self.binary_part_size * (index - 1);
+                        let part_len = cmp::min(self.binary_part_size, ctx.file_size - start_pos);
 
-                    let chunk_data =
-                        ctx.source
-                            .read_part(start_pos, part_len)
+                        let chunk_data =
+                            ctx.source
+                                .read_part(start_pos, part_len)
+                                .await
+                                .map_err(|e| Error::Generic {
+                                    error: format!("Failed to read binary part {index}: {e}"),
+                                })?;
+
+                        let params = ChunkUploadParams {
+                            binary: ctx.binary.clone(),
+                            api: ctx.api.clone(),
+                            global_options: ctx.global_options.clone(),
+                            client: ctx.client.clone(),
+                            pb,
+                            index,
+                            chunk_data,
+                        };
+
+                        tokio::spawn(Self::upload_chunk(params))
                             .await
                             .map_err(|e| Error::Generic {
-                                error: format!("Failed to read binary part {index}: {e}"),
-                            })?;
+                                error: format!("Upload task for binary part {index} failed: {e}"),
+                            })?
+                    }
+                    .await;
 
-                    let params = ChunkUploadParams {
-                        binary: ctx.binary.clone(),
-                        api: ctx.api.clone(),
-                        global_options: ctx.global_options.clone(),
-                        client: ctx.client.clone(),
-                        pb,
-                        index,
-                        chunk_data,
-                    };
-
-                    tokio::spawn(Self::upload_chunk(params))
-                        .await
-                        .map_err(|e| Error::Generic {
-                            error: format!("Upload task for binary part {index} failed: {e}"),
-                        })?
+                    (index, result)
                 }
             })
             .buffer_unordered(self.concurrency.into())
-            .collect::<Vec<Result<(), Error>>>()
+            .collect::<Vec<(u64, Result<(), Error>)>>()
             .await;
 
         pb.finish_and_clear();
 
-        results.into_iter().collect()
+        let failures = results
+            .into_iter()
+            .filter_map(|(index, result)| result.err().map(|error| (index, error)))
+            .collect();
+
+        summarize_failures(ctx.chunks_length, failures)
     }
 
     async fn upload_chunk(params: ChunkUploadParams) -> Result<(), Error> {
@@ -295,6 +371,7 @@ impl BinaryUploader {
 
         let res = client
             .put(url)
+            .timeout(upload_timeout(chunk_size))
             .body(Body::from(chunk_data))
             .header("x-amz-checksum-sha256", hash_base64)
             .header("content-length", chunk_size)
@@ -361,6 +438,51 @@ mod tests {
             assert_eq!(part.len() as u64, len);
             assert_eq!(part, data[start as usize..(start + len) as usize]);
         }
+    }
+
+    #[test]
+    fn part_count_enforces_the_api_limit() {
+        assert_eq!(part_count(0, 5 << 20).unwrap(), 0);
+        assert_eq!(part_count(10_000 * 5, 5).unwrap(), 10_000);
+
+        let err = part_count(10_000 * 5 + 1, 5).unwrap_err().to_string();
+        assert!(err.contains("10001 parts"), "{err}");
+        assert!(err.contains("--binary-part-size 6"), "{err}");
+
+        // the default part size tops out just under 49 GiB
+        assert!(part_count(49 << 30, 5 << 20).is_err());
+        assert!(part_count(48 << 30, 5 << 20).is_ok());
+    }
+
+    #[test]
+    fn summarize_failures_lists_failing_parts() {
+        let failure = |i: u64| {
+            (
+                i,
+                Error::Generic {
+                    error: format!("boom {i}"),
+                },
+            )
+        };
+
+        assert!(summarize_failures(5, vec![]).is_ok());
+
+        let err = summarize_failures(5, vec![failure(4), failure(2)])
+            .unwrap_err()
+            .to_string();
+        assert!(err.starts_with("2 of 5 binary parts failed"), "{err}");
+        assert!(err.contains("parts: 2, 4"), "{err}");
+        assert!(err.contains("First error: boom 2"), "{err}");
+
+        let many = (1..=25).map(failure).collect();
+        let err = summarize_failures(100, many).unwrap_err().to_string();
+        assert!(err.contains("and 5 more"), "{err}");
+    }
+
+    #[test]
+    fn upload_timeout_grows_with_part_size() {
+        assert_eq!(upload_timeout(0), Duration::from_secs(60));
+        assert!(upload_timeout(50 << 20) > upload_timeout(5 << 20));
     }
 
     #[tokio::test]
