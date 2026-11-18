@@ -87,11 +87,15 @@ fn describe_request_error(error: reqwest::Error, url: &str) -> String {
 /// form of the URL is scrubbed as well, since a cause may print it unescaped.
 fn redact_url(text: &str, url: &str) -> String {
     let decoded = percent_decode(url);
+    let candidates = [url, decoded.as_str()];
     let mut redacted = text.to_string();
 
-    for candidate in [url, decoded.as_str()] {
+    // whole URLs first, so a URL is not broken up by the query replacement below
+    for candidate in candidates {
         redacted = redacted.replace(candidate, "<url>");
+    }
 
+    for candidate in candidates {
         if let Some((_, query)) = candidate.split_once('?') {
             if !query.is_empty() {
                 redacted = redacted.replace(query, "<redacted>");
@@ -108,10 +112,13 @@ fn percent_decode(text: &str) -> String {
     let mut index = 0;
 
     while index < bytes.len() {
-        let escaped = (bytes[index] == b'%' && index + 2 < bytes.len())
-            .then(|| std::str::from_utf8(&bytes[index + 1..index + 3]).ok())
-            .flatten()
-            .and_then(|hex| u8::from_str_radix(hex, 16).ok());
+        let escaped = (bytes[index] == b'%'
+            && index + 2 < bytes.len()
+            && bytes[index + 1].is_ascii_hexdigit()
+            && bytes[index + 2].is_ascii_hexdigit())
+        .then(|| std::str::from_utf8(&bytes[index + 1..index + 3]).ok())
+        .flatten()
+        .and_then(|hex| u8::from_str_radix(hex, 16).ok());
 
         match escaped {
             Some(byte) => {
@@ -903,10 +910,25 @@ mod tests {
     }
 
     #[test]
+    fn redact_url_replaces_a_decoded_url_whole_when_only_the_path_has_escapes() {
+        let url = "https://h/a%2Fb?sig=secret";
+
+        // the decoded URL must be matched before its query is scrubbed on its own
+        let message = redact_url("failed for https://h/a/b?sig=secret", url);
+        assert_eq!(message, "failed for <url>");
+
+        let message = redact_url("failed for https://h/a%2Fb?sig=secret", url);
+        assert_eq!(message, "failed for <url>");
+    }
+
+    #[test]
     fn percent_decode_resolves_valid_escapes_only() {
         assert_eq!(percent_decode("a%2Fb%20c"), "a/b c");
         assert_eq!(percent_decode("100%"), "100%");
         assert_eq!(percent_decode("bad%zzescape%2"), "bad%zzescape%2");
+        // from_str_radix would accept a sign, but an escape needs two hex digits
+        assert_eq!(percent_decode("%+f"), "%+f");
+        assert_eq!(percent_decode("%-1"), "%-1");
         assert_eq!(percent_decode("plain"), "plain");
     }
 
