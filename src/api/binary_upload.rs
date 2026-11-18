@@ -15,6 +15,7 @@ use reqwest::Body;
 use reqwest::Client;
 use sha2::{Digest, Sha256};
 use std::cmp;
+use std::future::Future;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::Path;
 use std::sync::Arc;
@@ -51,6 +52,30 @@ fn upload_timeout(part_len: usize) -> Duration {
     UPLOAD_TIMEOUT_BASE + Duration::from_secs(part_len as u64 / MIN_UPLOAD_BYTES_PER_SEC)
 }
 
+/// Runs `upload_part` for parts `1..=total_parts`, at most `concurrency` at a time. Every part is
+/// attempted even after a failure.
+async fn run_parts<F, Fut>(
+    total_parts: u64,
+    concurrency: usize,
+    upload_part: F,
+) -> Result<(), Error>
+where
+    F: Fn(u64) -> Fut,
+    Fut: Future<Output = Result<(), Error>>,
+{
+    let failures = stream::iter(1..=total_parts)
+        .map(|index| {
+            let part = upload_part(index);
+            async move { (index, part.await) }
+        })
+        .buffer_unordered(concurrency)
+        .filter_map(|(index, result)| async move { result.err().map(|error| (index, error)) })
+        .collect::<Vec<_>>()
+        .await;
+
+    summarize_failures(total_parts, failures)
+}
+
 /// Reports every failed part, so a user can tell one failure from many.
 fn summarize_failures(total_parts: u64, mut failures: Vec<(u64, Error)>) -> Result<(), Error> {
     if failures.is_empty() {
@@ -74,8 +99,9 @@ fn summarize_failures(total_parts: u64, mut failures: Vec<(u64, Error)>) -> Resu
 
     Err(Error::Generic {
         error: format!(
-            "{} of {total_parts} binary parts failed to upload (parts: {listed}). First error: {}. Rerun the command to resume the upload.",
+            "{} of {total_parts} binary parts failed to upload (parts: {listed}). Part {} failed: {}. Rerun the command to resume the upload.",
             failures.len(),
+            failures[0].0,
             failures[0].1
         ),
     })
@@ -212,7 +238,7 @@ impl BinaryUploader {
             if expected_size != file_size {
                 return Err(Error::Generic {
                     error: format!(
-                        "Binary content is {file_size} bytes but the binary expects {expected_size} bytes; the content changed after it was hashed"
+                        "Binary content is {file_size} bytes but {expected_size} bytes were expected; the content does not match the size recorded for the binary"
                     ),
                 });
             }
@@ -252,66 +278,55 @@ impl BinaryUploader {
 
         let ctx = &ctx;
 
-        let results = stream::iter(1..=ctx.chunks_length)
-            .map(|index| {
-                let pb = Arc::clone(&pb);
+        let result = run_parts(ctx.chunks_length, self.concurrency.into(), |index| {
+            let pb = Arc::clone(&pb);
 
-                async move {
-                    let result = async {
-                        // parts that are already uploaded and valid are skipped
-                        if let Some(binary_part) =
-                            ctx.binary_parts.iter().find(|x| x.index as u64 == index)
-                        {
-                            if matches!(binary_part.state, BinaryPartState::Valid) {
-                                pb.inc(binary_part.size);
-                                return Ok(());
-                            }
+            async move {
+                {
+                    // parts that are already uploaded and valid are skipped
+                    if let Some(binary_part) =
+                        ctx.binary_parts.iter().find(|x| x.index as u64 == index)
+                    {
+                        if matches!(binary_part.state, BinaryPartState::Valid) {
+                            pb.inc(binary_part.size);
+                            return Ok(());
                         }
+                    }
 
-                        let start_pos = self.binary_part_size * (index - 1);
-                        let part_len = cmp::min(self.binary_part_size, ctx.file_size - start_pos);
+                    let start_pos = self.binary_part_size * (index - 1);
+                    let part_len = cmp::min(self.binary_part_size, ctx.file_size - start_pos);
 
-                        let chunk_data =
-                            ctx.source
-                                .read_part(start_pos, part_len)
-                                .await
-                                .map_err(|e| Error::Generic {
-                                    error: format!("Failed to read binary part {index}: {e}"),
-                                })?;
-
-                        let params = ChunkUploadParams {
-                            binary: ctx.binary.clone(),
-                            api: ctx.api.clone(),
-                            global_options: ctx.global_options.clone(),
-                            client: ctx.client.clone(),
-                            pb,
-                            index,
-                            chunk_data,
-                        };
-
-                        tokio::spawn(Self::upload_chunk(params))
+                    let chunk_data =
+                        ctx.source
+                            .read_part(start_pos, part_len)
                             .await
                             .map_err(|e| Error::Generic {
-                                error: format!("Upload task for binary part {index} failed: {e}"),
-                            })?
-                    }
-                    .await;
+                                error: format!("Failed to read binary part {index}: {e}"),
+                            })?;
 
-                    (index, result)
+                    let params = ChunkUploadParams {
+                        binary: ctx.binary.clone(),
+                        api: ctx.api.clone(),
+                        global_options: ctx.global_options.clone(),
+                        client: ctx.client.clone(),
+                        pb,
+                        index,
+                        chunk_data,
+                    };
+
+                    tokio::spawn(Self::upload_chunk(params))
+                        .await
+                        .map_err(|e| Error::Generic {
+                            error: format!("Upload task for binary part {index} failed: {e}"),
+                        })?
                 }
-            })
-            .buffer_unordered(self.concurrency.into())
-            .collect::<Vec<(u64, Result<(), Error>)>>()
-            .await;
+            }
+        })
+        .await;
 
         pb.finish_and_clear();
 
-        let failures = results
-            .into_iter()
-            .filter_map(|(index, result)| result.err().map(|error| (index, error)))
-            .collect();
-
-        summarize_failures(ctx.chunks_length, failures)
+        result
     }
 
     async fn upload_chunk(params: ChunkUploadParams) -> Result<(), Error> {
@@ -336,9 +351,7 @@ impl BinaryUploader {
             .run(params.global_options)
             .await
             .map_err(|e| Error::Generic {
-                error: format!(
-                    "Failed to create binary part {index}: {e}. Rerun the command to resume the upload."
-                ),
+                error: format!("Failed to create binary part {index}: {e}"),
             })?
             .ok_or_else(|| Error::Generic {
                 error: format!("Cannot create binary part {index}"),
@@ -378,8 +391,22 @@ impl BinaryUploader {
             .header("content-type", "application/octet-stream")
             .send()
             .await
-            .map_err(|e| Error::Generic {
-                error: format!("Failed to upload binary part {index} to storage: {e}"),
+            .map_err(|e| {
+                // the presigned URL carries credentials, so it is kept out of the message
+                let reason = if e.is_timeout() {
+                    "timed out"
+                } else if e.is_connect() {
+                    "could not connect"
+                } else {
+                    "request failed"
+                };
+
+                Error::Generic {
+                    error: format!(
+                        "Failed to upload binary part {index} to storage: {reason} ({})",
+                        e.without_url()
+                    ),
+                }
             })?;
 
         if !(200..=201).contains(&res.status().as_u16()) {
@@ -472,16 +499,59 @@ mod tests {
             .to_string();
         assert!(err.starts_with("2 of 5 binary parts failed"), "{err}");
         assert!(err.contains("parts: 2, 4"), "{err}");
-        assert!(err.contains("First error: boom 2"), "{err}");
+        assert!(err.contains("Part 2 failed: boom 2"), "{err}");
 
         let many = (1..=25).map(failure).collect();
         let err = summarize_failures(100, many).unwrap_err().to_string();
-        assert!(err.contains("and 5 more"), "{err}");
+        assert!(err.starts_with("25 of 100 binary parts failed"), "{err}");
+        assert!(err.contains("19, 20, and 5 more"), "{err}");
+        assert!(!err.contains("21,"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn run_parts_attempts_every_part_and_reports_failures() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let attempted = AtomicUsize::new(0);
+        let in_flight = AtomicUsize::new(0);
+        let max_in_flight = AtomicUsize::new(0);
+
+        let result = run_parts(8, 3, |index| {
+            let (attempted, in_flight, max_in_flight) = (&attempted, &in_flight, &max_in_flight);
+            async move {
+                attempted.fetch_add(1, Ordering::SeqCst);
+                let now = in_flight.fetch_add(1, Ordering::SeqCst) + 1;
+                max_in_flight.fetch_max(now, Ordering::SeqCst);
+                tokio::time::sleep(Duration::from_millis(5)).await;
+                in_flight.fetch_sub(1, Ordering::SeqCst);
+
+                if index == 2 || index == 5 {
+                    Err(Error::Generic {
+                        error: format!("boom {index}"),
+                    })
+                } else {
+                    Ok(())
+                }
+            }
+        })
+        .await;
+
+        let err = result.unwrap_err().to_string();
+        assert!(err.starts_with("2 of 8 binary parts failed"), "{err}");
+        assert!(err.contains("parts: 2, 5"), "{err}");
+        assert_eq!(attempted.load(Ordering::SeqCst), 8);
+        assert!(max_in_flight.load(Ordering::SeqCst) <= 3);
+    }
+
+    #[tokio::test]
+    async fn run_parts_succeeds_when_every_part_succeeds() {
+        assert!(run_parts(4, 2, |_| async { Ok(()) }).await.is_ok());
     }
 
     #[test]
     fn upload_timeout_grows_with_part_size() {
         assert_eq!(upload_timeout(0), Duration::from_secs(60));
+        assert_eq!(upload_timeout(5 << 20), Duration::from_secs(100));
         assert!(upload_timeout(50 << 20) > upload_timeout(5 << 20));
     }
 
@@ -563,13 +633,17 @@ mod tests {
         // nothing listens on port 1
         let result = BinaryUploader::put_part(
             &Client::new(),
-            "http://127.0.0.1:1/part".to_string(),
+            "http://127.0.0.1:1/part?X-Amz-Signature=secret".to_string(),
             vec![1],
             "aGFzaA==",
             3,
         )
         .await;
-        assert!(result.unwrap_err().to_string().contains("part 3"));
+        let message = result.unwrap_err().to_string();
+        assert!(message.contains("part 3"), "{message}");
+        assert!(message.contains("could not connect"), "{message}");
+        assert!(!message.contains("secret"), "{message}");
+        assert!(!message.contains("127.0.0.1"), "{message}");
     }
 
     #[tokio::test]
