@@ -18,6 +18,7 @@ use std::cmp;
 use std::future::Future;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread::available_parallelism;
 use std::time::Duration;
@@ -27,10 +28,11 @@ const MAX_PARTS: u64 = 10_000;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// A part upload is abandoned after this plus the time to send the part at
-/// `MIN_UPLOAD_BYTES_PER_SEC`.
-const UPLOAD_TIMEOUT_BASE: Duration = Duration::from_secs(60);
-const MIN_UPLOAD_BYTES_PER_SEC: u64 = 128 * 1024;
+/// A part upload is abandoned when no part data moves for this long, however slow the link is.
+const STALL_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Part data is handed to the HTTP client in pieces of this size, so progress is observable.
+const BODY_PIECE_SIZE: usize = 64 * 1024;
 
 /// Number of parts needed for `file_size`, or an error when it exceeds the API's part limit.
 fn part_count(file_size: u64, part_size: u64) -> Result<u64, Error> {
@@ -48,8 +50,29 @@ fn part_count(file_size: u64, part_size: u64) -> Result<u64, Error> {
     Ok(parts)
 }
 
-fn upload_timeout(part_len: usize) -> Duration {
-    UPLOAD_TIMEOUT_BASE + Duration::from_secs(part_len as u64 / MIN_UPLOAD_BYTES_PER_SEC)
+/// Awaits `future`, giving up with `None` once `progress` has not changed for `stall`.
+async fn until_stalled<T>(
+    future: impl Future<Output = T>,
+    progress: &AtomicU64,
+    stall: Duration,
+) -> Option<T> {
+    tokio::pin!(future);
+    let mut last_seen = progress.load(Ordering::Relaxed);
+
+    loop {
+        match tokio::time::timeout(stall, &mut future).await {
+            Ok(output) => return Some(output),
+            Err(_) => {
+                let current = progress.load(Ordering::Relaxed);
+
+                if current == last_seen {
+                    return None;
+                }
+
+                last_seen = current;
+            }
+        }
+    }
 }
 
 /// Runs `upload_part` for parts `1..=total_parts`, at most `concurrency` at a time. Every part is
@@ -365,6 +388,7 @@ impl BinaryUploader {
             params.chunk_data,
             &hash_base64,
             index,
+            STALL_TIMEOUT,
         )
         .await?;
 
@@ -379,18 +403,44 @@ impl BinaryUploader {
         chunk_data: Vec<u8>,
         hash_base64: &str,
         index: u64,
+        stall: Duration,
     ) -> Result<(), Error> {
         let chunk_size = chunk_data.len();
 
-        let res = client
+        // the counter advances each time the client asks for more data, which only happens as
+        // the connection accepts what was already handed over
+        let progress = Arc::new(AtomicU64::new(0));
+        let body = stream::unfold(
+            (chunk_data, 0usize, Arc::clone(&progress)),
+            |(data, position, progress)| async move {
+                if position >= data.len() {
+                    return None;
+                }
+
+                let end = cmp::min(position + BODY_PIECE_SIZE, data.len());
+                let piece = data[position..end].to_vec();
+                progress.fetch_add(1, Ordering::Relaxed);
+
+                Some((Ok::<_, io::Error>(piece), (data, end, progress)))
+            },
+        );
+
+        let request = client
             .put(url)
-            .timeout(upload_timeout(chunk_size))
-            .body(Body::from(chunk_data))
+            .body(Body::wrap_stream(body))
             .header("x-amz-checksum-sha256", hash_base64)
             .header("content-length", chunk_size)
             .header("content-type", "application/octet-stream")
-            .send()
+            .send();
+
+        let res = until_stalled(request, &progress, stall)
             .await
+            .ok_or_else(|| Error::Generic {
+                error: format!(
+                    "Failed to upload binary part {index} to storage: no data moved for {} seconds. If this keeps happening on a slow connection, lower --concurrency",
+                    stall.as_secs()
+                ),
+            })?
             .map_err(|e| {
                 // the presigned URL carries credentials, so it is kept out of the message
                 let reason = if e.is_timeout() {
@@ -548,11 +598,33 @@ mod tests {
         assert!(run_parts(4, 2, |_| async { Ok(()) }).await.is_ok());
     }
 
-    #[test]
-    fn upload_timeout_grows_with_part_size() {
-        assert_eq!(upload_timeout(0), Duration::from_secs(60));
-        assert_eq!(upload_timeout(5 << 20), Duration::from_secs(100));
-        assert!(upload_timeout(50 << 20) > upload_timeout(5 << 20));
+    #[tokio::test]
+    async fn until_stalled_gives_up_when_progress_stops() {
+        let progress = AtomicU64::new(0);
+        let result = until_stalled(
+            std::future::pending::<()>(),
+            &progress,
+            Duration::from_millis(50),
+        )
+        .await;
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn until_stalled_waits_while_progress_continues() {
+        let progress = AtomicU64::new(0);
+
+        // takes about 120ms, well past the 50ms stall window, but progresses every 20ms
+        let slow = async {
+            for _ in 0..6 {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+                progress.fetch_add(1, Ordering::Relaxed);
+            }
+            "done"
+        };
+
+        let result = until_stalled(slow, &progress, Duration::from_millis(50)).await;
+        assert_eq!(result, Some("done"));
     }
 
     #[tokio::test]
@@ -569,14 +641,15 @@ mod tests {
         }
     }
 
-    /// Serves one HTTP response with `status` and returns the URL to PUT to.
-    async fn mock_storage(status: u16) -> String {
+    /// Accepts one request and answers it with `status`, or never answers when `None`. Returns
+    /// the URL to PUT to and a handle that yields the raw request once it has been read.
+    async fn mock_storage(status: Option<u16>) -> (String, tokio::task::JoinHandle<Vec<u8>>) {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}/part", listener.local_addr().unwrap());
 
-        tokio::spawn(async move {
+        let server = tokio::spawn(async move {
             let (mut socket, _) = listener.accept().await.unwrap();
             let mut request = Vec::new();
             let mut chunk = [0u8; 1024];
@@ -601,31 +674,109 @@ mod tests {
                 }
             }
 
-            let response =
-                format!("HTTP/1.1 {status} X\r\ncontent-length: 0\r\nconnection: close\r\n\r\n");
-            socket.write_all(response.as_bytes()).await.unwrap();
+            match status {
+                Some(status) => {
+                    let response = format!(
+                        "HTTP/1.1 {status} X\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
+                    );
+                    socket.write_all(response.as_bytes()).await.unwrap();
+                }
+                None => tokio::time::sleep(Duration::from_secs(30)).await,
+            }
+
+            request
         });
 
-        url
+        (url, server)
     }
+
+    const TEST_STALL: Duration = Duration::from_secs(10);
 
     #[tokio::test]
     async fn put_part_succeeds_on_2xx() {
-        let url = mock_storage(200).await;
-        let result =
-            BinaryUploader::put_part(&Client::new(), url, vec![1, 2, 3], "aGFzaA==", 1).await;
+        let (url, _server) = mock_storage(Some(200)).await;
+        let result = BinaryUploader::put_part(
+            &Client::new(),
+            url,
+            vec![1, 2, 3],
+            "aGFzaA==",
+            1,
+            TEST_STALL,
+        )
+        .await;
         assert!(result.is_ok());
     }
 
     #[tokio::test]
+    async fn put_part_sends_the_whole_part_with_its_length() {
+        // spans several body pieces
+        let data = sample(3 * BODY_PIECE_SIZE + 123);
+        let (url, server) = mock_storage(Some(200)).await;
+
+        let result = tokio::time::timeout(
+            Duration::from_secs(10),
+            BinaryUploader::put_part(&Client::new(), url, data.clone(), "aGFzaA==", 1, TEST_STALL),
+        )
+        .await
+        .expect("upload did not finish");
+        assert!(result.is_ok());
+
+        let request = server.await.unwrap();
+        let header_end = request.windows(4).position(|w| w == b"\r\n\r\n").unwrap() + 4;
+        let headers = String::from_utf8_lossy(&request[..header_end]).to_lowercase();
+
+        assert!(
+            headers.contains(&format!("content-length: {}", data.len())),
+            "{headers}"
+        );
+        assert!(
+            headers.contains(&format!(
+                "x-amz-checksum-sha256: {}",
+                "aGFzaA==".to_lowercase()
+            )),
+            "{headers}"
+        );
+        assert_eq!(&request[header_end..], &data[..]);
+    }
+
+    #[tokio::test]
     async fn put_part_reports_the_part_and_status_on_failure() {
-        let url = mock_storage(500).await;
-        let err = BinaryUploader::put_part(&Client::new(), url, vec![1, 2, 3], "aGFzaA==", 7)
-            .await
-            .unwrap_err();
+        let (url, _server) = mock_storage(Some(500)).await;
+        let err = BinaryUploader::put_part(
+            &Client::new(),
+            url,
+            vec![1, 2, 3],
+            "aGFzaA==",
+            7,
+            TEST_STALL,
+        )
+        .await
+        .unwrap_err();
         let message = err.to_string();
         assert!(message.contains("part 7"), "{message}");
         assert!(message.contains("500"), "{message}");
+    }
+
+    #[tokio::test]
+    async fn put_part_gives_up_when_storage_stops_responding() {
+        let (url, _server) = mock_storage(None).await;
+        let url = format!("{url}?X-Amz-Signature=secret");
+
+        let err = BinaryUploader::put_part(
+            &Client::new(),
+            url,
+            vec![1, 2, 3],
+            "aGFzaA==",
+            4,
+            Duration::from_millis(200),
+        )
+        .await
+        .unwrap_err();
+        let message = err.to_string();
+        assert!(message.contains("part 4"), "{message}");
+        assert!(message.contains("no data moved"), "{message}");
+        assert!(message.contains("--concurrency"), "{message}");
+        assert!(!message.contains("secret"), "{message}");
     }
 
     #[tokio::test]
@@ -637,6 +788,7 @@ mod tests {
             vec![1],
             "aGFzaA==",
             3,
+            TEST_STALL,
         )
         .await;
         let message = result.unwrap_err().to_string();
