@@ -28,8 +28,10 @@ const MAX_PARTS: u64 = 10_000;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// A part upload is abandoned when no part data moves for this long, however slow the link is.
-const STALL_TIMEOUT: Duration = Duration::from_secs(60);
+/// By default a part upload is abandoned when no part data moves for this long. Progress is
+/// counted as pieces are handed to the HTTP client, so the window is generous: a slow link that is
+/// still draining its buffers is not mistaken for a stalled one.
+pub const DEFAULT_STALL_TIMEOUT: Duration = Duration::from_secs(600);
 
 /// Part data is handed to the HTTP client in pieces of this size, so progress is observable.
 const BODY_PIECE_SIZE: usize = 64 * 1024;
@@ -161,7 +163,7 @@ async fn until_stalled<T>(
                 }
 
                 let allowed = if progress.all_handed_over.load(Ordering::Relaxed) {
-                    stall * TAIL_STALL_FACTOR
+                    stall.saturating_mul(TAIL_STALL_FACTOR)
                 } else {
                     stall
                 };
@@ -232,6 +234,7 @@ fn summarize_failures(total_parts: u64, mut failures: Vec<(u64, Error)>) -> Resu
 pub struct BinaryUploader {
     binary_part_size: u64,
     concurrency: u8,
+    stall_timeout: Duration,
 }
 
 /// Where binary content is read from. Parts are read on demand.
@@ -319,6 +322,7 @@ struct PartUploadPlan<'a> {
     part_size: u64,
     file_size: u64,
     client: &'a Client,
+    stall: Duration,
 }
 
 /// Uploads part `index`, unless it is already valid. `create_part` registers the part with the
@@ -357,6 +361,7 @@ where
         pb,
         index,
         chunk_data,
+        plan.stall,
         create_part,
     ))
     .await
@@ -370,6 +375,7 @@ async fn upload_chunk<C, Fut>(
     pb: Arc<ProgressBar>,
     index: u64,
     chunk_data: Vec<u8>,
+    stall: Duration,
     create_part: C,
 ) -> Result<(), Error>
 where
@@ -396,7 +402,7 @@ where
 
     let hash_base64 = general_purpose::STANDARD.encode(hash);
 
-    BinaryUploader::put_part(&client, url, chunk_data, &hash_base64, index, STALL_TIMEOUT).await?;
+    BinaryUploader::put_part(&client, url, chunk_data, &hash_base64, index, stall).await?;
 
     pb.inc(chunk_size as u64);
 
@@ -410,6 +416,7 @@ impl Default for BinaryUploader {
             concurrency: cmp::min(available_parallelism().unwrap().get() * 2, 16)
                 .try_into()
                 .unwrap(),
+            stall_timeout: DEFAULT_STALL_TIMEOUT,
         }
     }
 }
@@ -426,6 +433,12 @@ impl BinaryUploader {
 
     pub fn with_concurrency(mut self, concurrency: u8) -> Self {
         self.concurrency = concurrency;
+        self
+    }
+
+    /// Sets how long a part upload may go without any part data moving before it is abandoned.
+    pub fn with_stall_timeout(mut self, stall_timeout: Duration) -> Self {
+        self.stall_timeout = stall_timeout;
         self
     }
 
@@ -493,6 +506,7 @@ impl BinaryUploader {
             part_size: self.binary_part_size,
             file_size: ctx.file_size,
             client: ctx.client,
+            stall: self.stall_timeout,
         };
         let plan = &plan;
         let ctx = &ctx;
@@ -577,7 +591,7 @@ impl BinaryUploader {
             .await
             .map_err(|idle| Error::Generic {
                 error: format!(
-                    "Failed to upload binary part {index} to storage: no data moved for {} seconds. If this keeps happening on a slow connection, lower --concurrency",
+                    "Failed to upload binary part {index} to storage: no data moved for {} seconds. If this keeps happening on a slow connection, lower --concurrency or raise --upload-stall-timeout",
                     idle.as_secs()
                 ),
             })?
@@ -597,6 +611,17 @@ impl BinaryUploader {
                     ),
                 }
             })?;
+
+        // A streamed body cannot be replayed, so redirects are not followed. A presigned S3 URL
+        // is signed for one host, so a redirect to another host would fail verification anyway.
+        if res.status().is_redirection() {
+            return Err(Error::Generic {
+                error: format!(
+                    "Failed to upload binary part {index} to storage: storage answered with a redirect (HTTP {}), which is not followed",
+                    res.status()
+                ),
+            });
+        }
 
         if !(200..=201).contains(&res.status().as_u16()) {
             return Err(Error::Generic {
@@ -956,15 +981,22 @@ mod tests {
         let (url, server) = mock_storage(Some(200)).await;
         let pb = hidden_progress();
 
-        let result = upload_chunk(Client::new(), Arc::clone(&pb), 3, data.clone(), {
-            let expected_hash = expected_hash.clone();
-            move |part: NewPart| async move {
-                assert_eq!(part.index, 3);
-                assert_eq!(part.size, 2_000);
-                assert_eq!(part.hash, expected_hash);
-                Ok(Some(url))
-            }
-        })
+        let result = upload_chunk(
+            Client::new(),
+            Arc::clone(&pb),
+            3,
+            data.clone(),
+            TEST_STALL,
+            {
+                let expected_hash = expected_hash.clone();
+                move |part: NewPart| async move {
+                    assert_eq!(part.index, 3);
+                    assert_eq!(part.size, 2_000);
+                    assert_eq!(part.hash, expected_hash);
+                    Ok(Some(url))
+                }
+            },
+        )
         .await;
 
         assert!(result.is_ok());
@@ -984,6 +1016,7 @@ mod tests {
             Arc::clone(&pb),
             3,
             vec![1, 2, 3],
+            TEST_STALL,
             |_| async {
                 Err(Error::Generic {
                     error: "denied".to_string(),
@@ -998,9 +1031,14 @@ mod tests {
         assert!(err.contains("denied"), "{err}");
         assert_eq!(pb.position(), 0);
 
-        let err = upload_chunk(Client::new(), Arc::clone(&pb), 4, vec![1], |_| async {
-            Ok(None)
-        })
+        let err = upload_chunk(
+            Client::new(),
+            Arc::clone(&pb),
+            4,
+            vec![1],
+            TEST_STALL,
+            |_| async { Ok(None) },
+        )
         .await
         .unwrap_err()
         .to_string();
@@ -1019,6 +1057,7 @@ mod tests {
             Arc::clone(&pb),
             5,
             vec![1, 2, 3],
+            TEST_STALL,
             |_| async { Ok(Some(url)) },
         )
         .await
@@ -1041,6 +1080,7 @@ mod tests {
             part_size: 4,
             file_size: 10,
             client: &client,
+            stall: TEST_STALL,
         };
         let pb = hidden_progress();
 
@@ -1076,6 +1116,7 @@ mod tests {
             part_size: 4,
             file_size: 10,
             client: &client,
+            stall: TEST_STALL,
         };
         let pb = hidden_progress();
 
@@ -1106,6 +1147,7 @@ mod tests {
             part_size: 4,
             file_size: 10,
             client: &client,
+            stall: TEST_STALL,
         };
         let (url, server) = mock_storage(Some(200)).await;
         let pb = hidden_progress();
@@ -1134,6 +1176,7 @@ mod tests {
             part_size: 4,
             file_size: 4,
             client: &client,
+            stall: TEST_STALL,
         };
 
         let err = upload_part(&plan, hidden_progress(), 1, |_| async {
@@ -1247,6 +1290,38 @@ mod tests {
             err.contains("part 2") && err.contains("no data moved"),
             "{err}"
         );
+    }
+
+    #[tokio::test]
+    async fn put_part_reports_a_redirect_as_not_followed() {
+        for status in [307, 308] {
+            let (url, _server) = mock_storage(Some(status)).await;
+            let err = BinaryUploader::put_part(
+                &Client::new(),
+                url,
+                vec![1, 2, 3],
+                "aGFzaA==",
+                6,
+                TEST_STALL,
+            )
+            .await
+            .unwrap_err()
+            .to_string();
+
+            assert!(err.contains("part 6"), "{err}");
+            assert!(err.contains("redirect"), "{err}");
+            assert!(err.contains(&status.to_string()), "{err}");
+            assert!(err.contains("not followed"), "{err}");
+        }
+    }
+
+    #[test]
+    fn stall_timeout_defaults_to_ten_minutes_and_can_be_set() {
+        assert_eq!(DEFAULT_STALL_TIMEOUT, Duration::from_secs(600));
+        assert_eq!(BinaryUploader::new().stall_timeout, DEFAULT_STALL_TIMEOUT);
+
+        let uploader = BinaryUploader::new().with_stall_timeout(Duration::from_secs(5));
+        assert_eq!(uploader.stall_timeout, Duration::from_secs(5));
     }
 
     #[tokio::test]
