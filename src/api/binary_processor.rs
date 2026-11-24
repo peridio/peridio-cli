@@ -69,6 +69,8 @@ impl SignatureConfig {
 pub struct BinaryProcessorConfig {
     pub binary_part_size: Option<u64>,
     pub concurrency: Option<u8>,
+    /// Seconds a part upload may go without any part data moving before it is abandoned.
+    pub upload_stall_timeout: Option<u64>,
     pub global_options: GlobalOptions,
     pub binary_content_hash: Option<String>,
     pub content_path: Option<String>,
@@ -187,6 +189,10 @@ impl BinaryProcessor {
 
         if let Some(concurrency) = self.config.concurrency {
             uploader = uploader.with_concurrency(concurrency);
+        }
+
+        if let Some(seconds) = self.config.upload_stall_timeout {
+            uploader = uploader.with_stall_timeout(Duration::from_secs(seconds));
         }
 
         uploader

@@ -53,6 +53,10 @@ pub struct PushCommand {
     #[arg(long)]
     concurrency: Option<u8>,
 
+    /// How many seconds a binary part upload may go without any data moving before it is abandoned. Progress is counted as data is handed to the HTTP client, so keep this generous on slow links. [default: 600]
+    #[arg(long, value_parser = clap::value_parser!(u64).range(1..))]
+    upload_stall_timeout: Option<u64>,
+
     #[clap(skip)]
     global_options: Option<GlobalOptions>,
 }
@@ -689,6 +693,7 @@ impl PushCommand {
                 let config = BinaryProcessorConfig {
                     binary_part_size: self.binary_part_size,
                     concurrency: self.concurrency,
+                    upload_stall_timeout: self.upload_stall_timeout,
                     global_options: self.global_options.clone().unwrap(),
                     binary_content_hash: Some(manifest_item.hash.clone()),
                     content_path: None, // Bundles work with in-memory content
@@ -952,6 +957,7 @@ impl PushCommand {
         let config = BinaryProcessorConfig {
             binary_part_size: self.binary_part_size,
             concurrency: self.concurrency,
+            upload_stall_timeout: self.upload_stall_timeout,
             global_options: self.global_options.clone().unwrap(),
             binary_content_hash: Some(manifest_item.hash.clone()),
             content_path: None, // Bundles work with in-memory content

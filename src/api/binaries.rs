@@ -206,6 +206,14 @@ pub struct CreateCommand {
     #[arg(long, requires = "content_path")]
     concurrency: Option<u8>,
 
+    /// How many seconds a binary part upload may go without any data moving before it is abandoned. Progress is counted as data is handed to the HTTP client, so keep this generous on slow links. [default: 600]
+    #[arg(
+        long,
+        requires = "content_path",
+        value_parser = clap::value_parser!(u64).range(1..),
+    )]
+    upload_stall_timeout: Option<u64>,
+
     /// The name(s) of signing key pair(s) in your Peridio CLI config. This will dictate both the private key to create a binary signature with as well as the signing key Peridio will use to verify the binary signature. Multiple pairs can be specified for multiple signatures.
     #[arg(
         long,
@@ -243,6 +251,7 @@ pub struct CreateCommand {
         long,
         default_value = "false",
         conflicts_with = "concurrency",
+        conflicts_with = "upload_stall_timeout",
         conflicts_with = "binary_part_size",
         conflicts_with = "signing_key_pair"
     )]
@@ -387,6 +396,7 @@ impl CreateCommand {
                 let config = BinaryProcessorConfig {
                     binary_part_size: self.binary_part_size,
                     concurrency: self.concurrency,
+                    upload_stall_timeout: self.upload_stall_timeout,
                     global_options: global_options.clone(),
                     binary_content_hash: binary.hash.clone(),
                     content_path: self.content_path.clone(),
