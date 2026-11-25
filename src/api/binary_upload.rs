@@ -36,6 +36,18 @@ pub const DEFAULT_STALL_TIMEOUT: Duration = Duration::from_secs(600);
 /// Part data is handed to the HTTP client in pieces of this size, so progress is observable.
 const BODY_PIECE_SIZE: usize = 64 * 1024;
 
+/// The HTTP client that sends part data to storage. Redirects are never followed: a 303 would
+/// turn the PUT into a bodyless GET, and a 200 from that GET must not count as a stored part.
+fn upload_client() -> Result<Client, Error> {
+    Client::builder()
+        .connect_timeout(CONNECT_TIMEOUT)
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|e| Error::Generic {
+            error: format!("Failed to create HTTP client: {e}"),
+        })
+}
+
 /// Number of parts needed for `file_size`, or an error when it exceeds the API's part limit.
 fn part_count(file_size: u64, part_size: u64) -> Result<u64, Error> {
     let parts = file_size.div_ceil(part_size);
@@ -470,12 +482,7 @@ impl BinaryUploader {
 
         let chunks_length = part_count(file_size, self.binary_part_size)?;
 
-        let client = Client::builder()
-            .connect_timeout(CONNECT_TIMEOUT)
-            .build()
-            .map_err(|e| Error::Generic {
-                error: format!("Failed to create HTTP client: {e}"),
-            })?;
+        let client = upload_client()?;
         let binary_parts = self.get_binary_parts(binary, api, &global_options).await?;
 
         let ctx = UploadContext {
@@ -843,6 +850,15 @@ mod tests {
         status: Option<u16>,
         delay: Duration,
     ) -> (String, tokio::task::JoinHandle<Vec<u8>>) {
+        mock_storage_with(status, delay, None).await
+    }
+
+    /// Like `mock_storage_after`, and adds a `Location` header to the response when given.
+    async fn mock_storage_with(
+        status: Option<u16>,
+        delay: Duration,
+        location: Option<String>,
+    ) -> (String, tokio::task::JoinHandle<Vec<u8>>) {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -876,8 +892,11 @@ mod tests {
             match status {
                 Some(status) => {
                     tokio::time::sleep(delay).await;
+                    let location = location
+                        .map(|l| format!("location: {l}\r\n"))
+                        .unwrap_or_default();
                     let response = format!(
-                        "HTTP/1.1 {status} X\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
+                        "HTTP/1.1 {status} X\r\n{location}content-length: 0\r\nconnection: close\r\n\r\n"
                     );
                     socket.write_all(response.as_bytes()).await.unwrap();
                 }
@@ -1312,6 +1331,31 @@ mod tests {
             assert!(err.contains("redirect"), "{err}");
             assert!(err.contains(&status.to_string()), "{err}");
             assert!(err.contains("not followed"), "{err}");
+        }
+    }
+
+    #[tokio::test]
+    async fn upload_client_reports_every_redirect_instead_of_following_it() {
+        for status in [301, 302, 303, 307, 308] {
+            // the target would answer 200 to whatever reaches it, as a bodyless GET would get
+            let (target, _target_server) = mock_storage(Some(200)).await;
+            let (url, _server) =
+                mock_storage_with(Some(status), Duration::ZERO, Some(target)).await;
+
+            let err = BinaryUploader::put_part(
+                &upload_client().unwrap(),
+                url,
+                vec![1, 2, 3],
+                "aGFzaA==",
+                7,
+                TEST_STALL,
+            )
+            .await
+            .expect_err(&format!("a {status} must not count as an uploaded part"))
+            .to_string();
+
+            assert!(err.contains("redirect"), "{err}");
+            assert!(err.contains(&status.to_string()), "{err}");
         }
     }
 
